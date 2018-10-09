@@ -10,15 +10,15 @@ namespace WebSocketManager
 {
     public class WebSocketConnectionManager
     {
-        private ConcurrentDictionary<string, WebSocket> _sockets = new ConcurrentDictionary<string, WebSocket>();
+        private ConcurrentDictionary<string, WebSocketConnection> _sockets = new ConcurrentDictionary<string, WebSocketConnection>();
         private ConcurrentDictionary<string, List<string>> _groups = new ConcurrentDictionary<string, List<string>>();
 
-        public WebSocket GetSocketById(string id)
+        public WebSocketConnection GetSocketById(string id)
         {
             return _sockets.FirstOrDefault(p => p.Key == id).Value;
         }
 
-        public ConcurrentDictionary<string, WebSocket> GetAll()
+        public ConcurrentDictionary<string, WebSocketConnection> GetAll()
         {
             return _sockets;
         }
@@ -33,14 +33,14 @@ namespace WebSocketManager
             return default(List<string>);
         }
 
-        public string GetId(WebSocket socket)
+        public string GetId(WebSocketConnection socket)
         {
             return _sockets.FirstOrDefault(p => p.Value == socket).Key;
         }
 
-        public void AddSocket(WebSocket socket)
+        public void AddSocket(WebSocketConnection socket)
         {
-            _sockets.TryAdd(CreateConnectionId(), socket);
+            _sockets.TryAdd(socket.Id, socket);
         }
 
         public void AddToGroup(string socketID, string groupID)
@@ -67,19 +67,15 @@ namespace WebSocketManager
         {
             if (id == null) return;
 
-            WebSocket socket;
+            WebSocketConnection socket;
             _sockets.TryRemove(id, out socket);
 
-            if (socket.State != WebSocketState.Open) return;
+            if (socket.WebSocket.State != WebSocketState.Open) return;
 
-            await socket.CloseAsync(closeStatus: WebSocketCloseStatus.NormalClosure,
+            await socket.WebSocket.CloseAsync(closeStatus: WebSocketCloseStatus.NormalClosure,
                                     statusDescription: "Closed by the WebSocketManager",
                                     cancellationToken: CancellationToken.None).ConfigureAwait(false);
         }
 
-        private string CreateConnectionId()
-        {
-            return Guid.NewGuid().ToString();
-        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.WebSockets;
@@ -65,13 +66,27 @@ namespace WebSocketManager.Common
         /// The invocation descriptor containing the method name and parameters.
         /// </param>
         /// <returns>Awaitable Task.</returns>
-        public override async Task<object> OnInvokeMethodReceivedAsync(WebSocket socket, InvocationDescriptor invocationDescriptor)
+        public override async Task<object> OnInvokeMethodReceivedAsync(string socketId, InvocationDescriptor invocationDescriptor)
         {
             if (!_handlers.ContainsKey(invocationDescriptor.MethodName))
                 throw new Exception($"Received unknown command '{invocationDescriptor.MethodName}'.");
             var invocationHandler = _handlers[invocationDescriptor.MethodName];
             if (invocationHandler != null)
-                return await Task.Run(() => invocationHandler.Handler(invocationDescriptor.Arguments));
+            {
+                List<object> args = new List<object>();
+                if (invocationDescriptor.Params is JArray)
+                {
+                    JArray array = (JArray)invocationDescriptor.Params;
+                    args = array.ToObject<List<object>>();
+                }
+                else if (invocationDescriptor.Params is JObject)
+                {
+                    args.Add(invocationDescriptor.Params as object);
+                }
+                //if (!NoWebsocketArgument)
+                //    args.Insert(0, socketId);
+                return await Task.Run(() => invocationHandler.Handler(args.ToArray()));
+            }
             return await Task.FromResult<object>(null);
         }
     }

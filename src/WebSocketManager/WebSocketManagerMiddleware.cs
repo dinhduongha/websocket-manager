@@ -41,35 +41,48 @@ namespace WebSocketManager
             }
 
             var socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
-            await _webSocketHandler.OnConnected(socket).ConfigureAwait(false);
+            var webSocketConnection = new WebSocketConnection(context, socket);
+            await _webSocketHandler.OnConnected(webSocketConnection).ConfigureAwait(false);
 
-            await Receive(socket, async (result, serializedMessage) =>
+            await Receive(webSocketConnection, async (result, serializedMessage) =>
             {
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
-                    Message message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);
-                    await _webSocketHandler.ReceiveAsync(socket, result, message).ConfigureAwait(false);
+                    //Message message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);
+                    //await _webSocketHandler.ReceivedTextAsync(webSocketConnection, result, message).ConfigureAwait(false);
+                    await _webSocketHandler.ReceivedTextAsync(webSocketConnection, serializedMessage).ConfigureAwait(false);
+                    return;
+                }
+                else if (result.MessageType == WebSocketMessageType.Binary)
+                {
+                    try
+                    {
+                        await _webSocketHandler.ReceivedBinaryAsync(webSocketConnection, serializedMessage);
+                    }
+                    catch (WebSocketException)
+                    {
+                        throw; //let's not swallow any exception for now
+                    }
                     return;
                 }
                 else if (result.MessageType == WebSocketMessageType.Close)
                 {
                     try
                     {
-                        await _webSocketHandler.OnDisconnected(socket);
+                        await _webSocketHandler.OnDisconnected(webSocketConnection);
                     }
                     catch (WebSocketException)
                     {
                         throw; //let's not swallow any exception for now
                     }
-
                     return;
                 }
             });
         }
 
-        private async Task Receive(WebSocket socket, Action<WebSocketReceiveResult, string> handleMessage)
+        private async Task Receive(WebSocketConnection socket, Action<WebSocketReceiveResult, string> handleMessage)
         {
-            while (socket.State == WebSocketState.Open)
+            while (socket.WebSocket.State == WebSocketState.Open)
             {
                 ArraySegment<Byte> buffer = new ArraySegment<byte>(new Byte[1024 * 4]);
                 string message = null;
@@ -80,7 +93,7 @@ namespace WebSocketManager
                     {
                         do
                         {
-                            result = await socket.ReceiveAsync(buffer, CancellationToken.None).ConfigureAwait(false);
+                            result = await socket.WebSocket.ReceiveAsync(buffer, CancellationToken.None).ConfigureAwait(false);
                             ms.Write(buffer.Array, buffer.Offset, result.Count);
                         }
                         while (!result.EndOfMessage);
@@ -99,7 +112,7 @@ namespace WebSocketManager
                 {
                     if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
                     {
-                        socket.Abort();
+                        socket.WebSocket.Abort();
                     }
                 }
             }

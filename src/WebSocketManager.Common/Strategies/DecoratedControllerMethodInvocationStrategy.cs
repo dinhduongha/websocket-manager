@@ -5,6 +5,8 @@ using System.Net.WebSockets;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace WebSocketManager.Common
 {
@@ -93,7 +95,7 @@ namespace WebSocketManager.Common
         /// The invocation descriptor containing the method name and parameters.
         /// </param>
         /// <returns>Awaitable Task.</returns>
-        public override async Task<object> OnInvokeMethodReceivedAsync(WebSocket socket, InvocationDescriptor invocationDescriptor)
+        public override async Task<object> OnInvokeMethodReceivedAsync(string socketId, InvocationDescriptor invocationDescriptor)
         {
             // there must be a separator in the method name.
             if (!invocationDescriptor.MethodName.Contains(Separator)) throw new Exception($"Invalid controller or method name '{invocationDescriptor.MethodName}'.");
@@ -113,10 +115,18 @@ namespace WebSocketManager.Common
                 if (method == null)
                     throw new Exception($"Received unknown command '{command}' for controller '{controller}'.");
 
-                // optionally insert client as parameter.
-                List<object> args = invocationDescriptor.Arguments.ToList();
+                List<object> args = new List<object>();
+                if (invocationDescriptor.Params is JArray)
+                {
+                    JArray array = (JArray)invocationDescriptor.Params;
+                    args = array.ToObject<List<object>>();
+                }
+                else if (invocationDescriptor.Params is JObject)
+                {
+                    args.Add(invocationDescriptor.Params as object);
+                }
                 if (!NoWebsocketArgument)
-                    args.Insert(0, socket);
+                    args.Insert(0, socketId);
 
                 // call the method asynchronously.
                 try

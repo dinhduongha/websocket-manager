@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Net.WebSockets;
 using System.Threading.Tasks;
 using WebSocketManager;
@@ -13,7 +14,7 @@ namespace ChatApplication
             ((ControllerMethodInvocationStrategy)MethodInvocationStrategy).Controller = this;
         }
 
-        public override async Task OnConnected(WebSocket socket)
+        public override async Task OnConnected(WebSocketConnection socket)
         {
             await base.OnConnected(socket);
 
@@ -29,7 +30,7 @@ namespace ChatApplication
         }
 
         // this method can be called from a client, doesn't return anything.
-        public async Task SendMessage(WebSocket socket, string message)
+        public async Task SendMessage(WebSocketConnection socket, string message)
         {
             // chat command.
             if (message == "/math")
@@ -43,14 +44,25 @@ namespace ChatApplication
         }
 
         // this method can be called from a client, returns the integer result or throws an exception.
-        public int DoMath(WebSocket socket, int a, int b)
+        public Int64 domath(string socketId, Int64 a, Int64 b)
         {
             if (a == 0 || b == 0) throw new Exception("That makes no sense.");
             return a + b;
         }
-
+        public object doObject(string socketId, object obj)
+        {
+            return obj;
+        }
+        public object doJObject(string socketId, JObject obj)
+        {
+            return obj;
+        }
+        public object[] doa(string socketId, object[] obj)
+        {
+            return obj;
+        }
         // we ask a client to do some math for us then broadcast the results.
-        private async Task AskClientToDoMath(WebSocket socket)
+        private async Task AskClientToDoMath(WebSocketConnection socket)
         {
             string id = WebSocketConnectionManager.GetId(socket);
             try
@@ -64,7 +76,7 @@ namespace ChatApplication
             }
         }
 
-        public override async Task OnDisconnected(WebSocket socket)
+        public override async Task OnDisconnected(WebSocketConnection socket)
         {
             var socketId = WebSocketConnectionManager.GetId(socket);
 
