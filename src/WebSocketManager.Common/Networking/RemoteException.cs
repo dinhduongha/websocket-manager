@@ -13,7 +13,7 @@ namespace WebSocketManager.Common
         /// </summary>
         /// <value>The error code.</value>
         [JsonProperty("code")]
-        public Int64 Code { get; set; } = -1;
+        public long Code { get; set; } = -1;
 
         /// <summary>
         /// Gets or sets the exception message.
@@ -21,6 +21,13 @@ namespace WebSocketManager.Common
         /// <value>The exception message.</value>
         [JsonProperty("message")]
         public string Message { get; set; } = $"A remote exception occured";
+
+        /// <summary>
+        /// Gets or sets the exception data.
+        /// </summary>
+        /// <value>The exception data.</value>
+        [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+        public object Data { get; set; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RemoteException"/> class.
@@ -39,7 +46,7 @@ namespace WebSocketManager.Common
             Message = $"A remote exception occured: '{exception.Message}'.";
         }
 
-        public RemoteException(Int64 code, string message)
+        public RemoteException(long code, string message)
         {
             Code = code;
             Message = message;

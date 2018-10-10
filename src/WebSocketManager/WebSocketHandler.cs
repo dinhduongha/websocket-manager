@@ -27,7 +27,7 @@ namespace WebSocketManager
         /// The waiting remote invocations for Server to Client method calls.
         /// </summary>
 
-        private Dictionary<string, Dictionary<Int64, TaskCompletionSource<InvocationResult>>> _waitingRemoteInvocations = new Dictionary<string, Dictionary<Int64,TaskCompletionSource<InvocationResult>>>();
+        private Dictionary<string, Dictionary<long, TaskCompletionSource<InvocationResult>>> _waitingRemoteInvocations = new Dictionary<string, Dictionary<long,TaskCompletionSource<InvocationResult>>>();
 
         /// <summary>
         /// Gets the method invocation strategy.
@@ -73,178 +73,7 @@ namespace WebSocketManager
             await WebSocketConnectionManager.RemoveSocket(WebSocketConnectionManager.GetId(socket)).ConfigureAwait(false);
         }
 
-        public async Task SendMessageAsync(WebSocketConnection socket, Message message)
-        {
-            if (socket.WebSocket.State != WebSocketState.Open)
-                return;
-
-            //var serializedMessage = JsonConvert.SerializeObject(message, _jsonSerializerSettings);
-            //var encodedMessage = Encoding.UTF8.GetBytes(serializedMessage);
-            var encodedMessage = Encoding.UTF8.GetBytes(message.Data);
-            await socket.WebSocket.SendAsync(buffer: new ArraySegment<byte>(array: encodedMessage,
-                                                                  offset: 0,
-                                                                  count: encodedMessage.Length),
-                                   messageType: WebSocketMessageType.Text,
-                                   endOfMessage: true,
-                                   cancellationToken: CancellationToken.None).ConfigureAwait(false);
-        }
-
-        public async Task SendMessageAsync(string socketId, Message message)
-        {
-            await SendMessageAsync(WebSocketConnectionManager.GetSocketById(socketId), message).ConfigureAwait(false);
-        }
-
-        public async Task SendMessageToAllAsync(Message message)
-        {
-            foreach (var pair in WebSocketConnectionManager.GetAll())
-            {
-                try
-                {
-                    if (pair.Value.WebSocket.State == WebSocketState.Open)
-                        await SendMessageAsync(pair.Value, message).ConfigureAwait(false);
-                }
-                catch (WebSocketException e)
-                {
-                    if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
-                    {
-                        await OnDisconnected(pair.Value);
-                    }
-                }
-            }
-        }
-
-        public async Task InvokeClientMethodAsync(string socketId, string methodName, object[] arguments)
-        {
-
-            var message = new Message()
-            {
-                //MessageType = MessageType.MethodInvocation,
-                Data = JsonConvert.SerializeObject(new InvocationDescriptor()
-                {
-                    MethodName = methodName,
-                    Params = arguments,
-                }, _jsonSerializerSettings)
-            };
-
-            await SendMessageAsync(socketId, message).ConfigureAwait(false);
-        }
-
-        public async Task<T> InvokeClientMethodAsync<T>(string socketId, string methodName, object[] arguments)
-        {
-            // create the method invocation descriptor.
-            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = arguments };
-
-            // generate a unique identifier for this invocation.
-            invocationDescriptor.Id = 0; // Guid.NewGuid();
-
-            // add ourselves to the waiting list for return values.
-            TaskCompletionSource<InvocationResult> task = new TaskCompletionSource<InvocationResult>();
-            // after a timeout of 60 seconds we will cancel the task and remove it from the waiting list.
-            new CancellationTokenSource(1000 * 60).Token.Register(() => { _waitingRemoteInvocations[socketId].Remove(invocationDescriptor.Id); task.TrySetCanceled(); });
-            if (!_waitingRemoteInvocations.ContainsKey(socketId))
-            {
-                _waitingRemoteInvocations[socketId] = new Dictionary<Int64, TaskCompletionSource<InvocationResult>>();
-            }
-            _waitingRemoteInvocations[socketId].Add(invocationDescriptor.Id, task);
-
-            // send the method invocation to the client.
-            var message = new Message() { MessageType = MessageType.MethodInvocation, Data = JsonConvert.SerializeObject(invocationDescriptor, _jsonSerializerSettings) };
-            await SendMessageAsync(socketId, message).ConfigureAwait(false);
-
-            // wait for the return value elsewhere in the program.
-            InvocationResult result = await task.Task;
-
-            // ... we just got an answer.
-
-            // if we have completed successfully:
-            if (task.Task.IsCompleted)
-            {
-                // there was a remote exception so we throw it here.
-                if (result.Exception != null)
-                    throw new Exception(result.Exception.Message);
-
-                // return the value.
-
-                // support null.
-                if (result.Result == null) return default(T);
-                // cast anything to T and hope it works.
-                return (T)result.Result;
-            }
-
-            // if we reach here we got cancelled or alike so throw a timeout exception.
-            throw new TimeoutException(); // todo: insert fancy message here.
-        }
-
-        public async Task InvokeClientMethodToAllAsync(string methodName, params object[] arguments)
-        {
-            foreach (var pair in WebSocketConnectionManager.GetAll())
-            {
-                try
-                {
-                    if (pair.Value.WebSocket.State == WebSocketState.Open)
-                        await InvokeClientMethodAsync(pair.Key, methodName, arguments).ConfigureAwait(false);
-                }
-                catch (WebSocketException e)
-                {
-                    if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
-                    {
-                        await OnDisconnected(pair.Value);
-                    }
-                }
-            }
-        }
-
-        public async Task SendMessageToGroupAsync(string groupID, Message message)
-        {
-            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
-            if (sockets != null)
-            {
-                foreach (var socket in sockets)
-                {
-                    await SendMessageAsync(socket, message);
-                }
-            }
-        }
-
-        public async Task SendMessageToGroupAsync(string groupID, Message message, string except)
-        {
-            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
-            if (sockets != null)
-            {
-                foreach (var id in sockets)
-                {
-                    if (id != except)
-                        await SendMessageAsync(id, message);
-                }
-            }
-        }
-
-        public async Task InvokeClientMethodToGroupAsync(string groupID, string methodName, params object[] arguments)
-        {
-            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
-            if (sockets != null)
-            {
-                foreach (var id in sockets)
-                {
-                    await InvokeClientMethodAsync(id, methodName, arguments);
-                }
-            }
-        }
-
-        public async Task InvokeClientMethodToGroupAsync(string groupID, string methodName, string except, params object[] arguments)
-        {
-            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
-            if (sockets != null)
-            {
-                foreach (var id in sockets)
-                {
-                    if (id != except)
-                        await InvokeClientMethodAsync(id, methodName, arguments);
-                }
-            }
-        }
-
-        public async Task ReceivedTextAsync(WebSocketConnection socket, string serializedMessage)
+        public async Task OnReceivedTextAsync(WebSocketConnection socket, string serializedMessage)
         {
             InvocationDescriptor invocationDescriptor = null;
             try
@@ -315,38 +144,337 @@ namespace WebSocketManager
             }
             else
             {
-                var socketId = WebSocketConnectionManager.GetId(socket);
-                var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
+                await OnResponseAsync(socket, serializedMessage);   
+            }
+        }
 
-                if (_waitingRemoteInvocations.ContainsKey(socketId))
+        public virtual async Task OnResponseAsync(WebSocketConnection socket, string serializedMessage)
+        {
+            var socketId = WebSocketConnectionManager.GetId(socket);
+            var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
+
+            if (_waitingRemoteInvocations.ContainsKey(socketId) && invocationResult.Id > 0)
+            {
+                if (_waitingRemoteInvocations[socketId].ContainsKey(invocationResult.Id))
                 {
-                    if (invocationResult.Result != null)
+                    _waitingRemoteInvocations[socketId][invocationResult.Id].SetResult(invocationResult);
+                    // remove the completion source from the waiting list.
+                }
+                _waitingRemoteInvocations[socketId].Remove(invocationResult.Id);
+            }
+        }
+
+        public virtual async Task OnReceivedBinaryAsync(WebSocketConnection socket, string receivedMessage)
+        {
+        }
+
+        public async Task SendMessageAsync(WebSocketConnection socket, Message message)
+        {
+            if (socket.WebSocket.State != WebSocketState.Open)
+                return;
+
+            //var serializedMessage = JsonConvert.SerializeObject(message, _jsonSerializerSettings);
+            //var encodedMessage = Encoding.UTF8.GetBytes(serializedMessage);
+            var encodedMessage = Encoding.UTF8.GetBytes(message.Data);
+            try
+            {
+                await socket.WebSocket.SendAsync(buffer: new ArraySegment<byte>(array: encodedMessage,
+                                                                      offset: 0,
+                                                                      count: encodedMessage.Length),
+                                       messageType: WebSocketMessageType.Text,
+                                       endOfMessage: true,
+                                       cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (WebSocketException e)
+            {
+                if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+                {
+                    await OnDisconnected(socket);
+                }
+            }
+        }
+
+        public async Task SendMessageAsync(string socketId, Message message)
+        {
+            await SendMessageAsync(WebSocketConnectionManager.GetSocketById(socketId), message).ConfigureAwait(false);
+        }
+
+        public async Task SendMessageToAllAsync(Message message)
+        {
+            foreach (var pair in WebSocketConnectionManager.GetAll())
+            {
+                try
+                {
+                    if (pair.Value.WebSocket.State == WebSocketState.Open)
+                        await SendMessageAsync(pair.Value, message).ConfigureAwait(false);
+                }
+                catch (WebSocketException e)
+                {
+                    if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
                     {
-                        //var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
-                        // find the completion source in the waiting list.
-                        {
-                            // set the result of the completion source so the invoke method continues executing.
-                            _waitingRemoteInvocations[socketId][invocationResult.Id].SetResult(invocationResult);
-                            // remove the completion source from the waiting list.
-                            _waitingRemoteInvocations[socketId].Remove(invocationResult.Id);
-                        }
-                    }
-                    // method return value.
-                    else if (invocationResult.Exception != null)
-                    {
-                        //var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
-                        {
-                            // set the result of the completion source so the invoke method continues executing.
-                            _waitingRemoteInvocations[socketId][invocationResult.Id].SetResult(invocationResult);
-                            // remove the completion source from the waiting list.
-                            _waitingRemoteInvocations[socketId].Remove(invocationResult.Id);
-                        }
+                        await OnDisconnected(pair.Value);
                     }
                 }
             }
         }
-        public async Task ReceivedBinaryAsync(WebSocketConnection socket, string receivedMessage)
+
+        public async Task SendMessageToGroupAsync(string groupID, Message message)
         {
+            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
+            if (sockets != null)
+            {
+                foreach (var socket in sockets)
+                {
+                    await SendMessageAsync(socket, message);
+                }
+            }
+        }
+
+        public async Task SendMessageToGroupAsync(string groupID, Message message, string except)
+        {
+            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
+            if (sockets != null)
+            {
+                foreach (var id in sockets)
+                {
+                    if (id != except)
+                        await SendMessageAsync(id, message);
+                }
+            }
+        }
+
+        public async Task SendClientResultAsync(string socketId, string methodName, object result)
+        {
+            // create the method invocation descriptor.
+            InvocationResult invocationResult = new InvocationResult { MethodName = methodName, Result = result };
+            WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
+            if (socket == null)
+                return;
+
+            invocationResult.Id = socket.NextCmdId();
+            var message = new Message()
+            {
+                MessageType = MessageType.MethodInvocation,
+                Data = JsonConvert.SerializeObject(invocationResult)
+            };
+
+            await SendMessageAsync(socketId, message).ConfigureAwait(false);
+        }
+
+        public async Task SendClientErrorAsync(string socketId, string methodName, RemoteException error)
+        {
+            // create the method invocation descriptor.
+            InvocationResult invocationResult = new InvocationResult { MethodName = methodName, Exception = error };
+            WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
+            if (socket == null)
+                return;
+
+            invocationResult.Id = socket.NextCmdId();
+            var message = new Message()
+            {
+                MessageType = MessageType.MethodInvocation,
+                Data = JsonConvert.SerializeObject(invocationResult)
+            };
+
+            await SendMessageAsync(socketId, message).ConfigureAwait(false);
+        }
+
+        public async Task SendClientNotifyAsync(string socketId, string methodName, object result)
+        {
+            // create the method invocation descriptor.
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = result };
+            WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
+            if (socket == null)
+                return;
+
+            var message = new Message()
+            {
+                MessageType = MessageType.MethodInvocation,
+                Data = JsonConvert.SerializeObject(invocationDescriptor)
+            };
+
+            await SendMessageAsync(socketId, message).ConfigureAwait(false);
+        }
+
+        public async Task SendAllNotifyAsync(string methodName, object result)
+        {
+            // create the method invocation descriptor.
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = result };
+
+            var message = new Message()
+            {
+                MessageType = MessageType.MethodInvocation,
+                Data = JsonConvert.SerializeObject(invocationDescriptor)
+            };
+
+            foreach (var pair in WebSocketConnectionManager.GetAll())
+            {
+                try
+                {
+                    if (pair.Value.WebSocket.State == WebSocketState.Open)
+                        await SendMessageAsync(pair.Value, message).ConfigureAwait(false);
+                }
+                catch (WebSocketException e)
+                {
+                    if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+                    {
+                        await OnDisconnected(pair.Value);
+                    }
+                }
+            }
+        }
+
+        public async Task SendGroupNotifyAsync(string groupID, string methodName, object result)
+        {
+            // create the method invocation descriptor.
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = result };
+
+            var message = new Message()
+            {
+                MessageType = MessageType.MethodInvocation,
+                Data = JsonConvert.SerializeObject(invocationDescriptor)
+            };
+
+            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
+            if (sockets != null)
+            {
+                foreach (var id in sockets)
+                {
+                    await SendMessageAsync(id, message);
+                }
+            }
+        }
+
+        public async Task InvokeClientMethodAsync(string socketId, string methodName, object[] arguments)
+        {
+            object methodParams = null;
+            if (arguments.Length == 1)
+            {
+                methodParams = arguments[0];
+            }
+            else
+            {
+                methodParams = arguments;
+            }
+            // create the method invocation descriptor.
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = methodParams };
+            WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
+            if (socket == null)
+                return;
+
+            invocationDescriptor.Id = socket.NextCmdId();
+            var message = new Message()
+            {
+                MessageType = MessageType.MethodInvocation,
+                Data = JsonConvert.SerializeObject(invocationDescriptor)
+            };
+
+            await SendMessageAsync(socketId, message).ConfigureAwait(false);
+        }
+
+        public async Task<T> InvokeClientMethodAsync<T>(string socketId, string methodName, object[] arguments)
+        {
+            // create the method invocation descriptor.
+            object methodParams = null;
+            if (arguments.Length == 1)
+            {
+                methodParams = arguments[0];
+            }
+            else
+            {
+                methodParams = arguments;
+            }
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = methodParams };
+            WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
+            // generate a unique identifier for this invocation.
+            if (socket == null)
+                return default(T);
+            invocationDescriptor.Id = socket.NextCmdId(); // Guid.NewGuid();
+
+            // add ourselves to the waiting list for return values.
+            TaskCompletionSource<InvocationResult> task = new TaskCompletionSource<InvocationResult>();
+            // after a timeout of 60 seconds we will cancel the task and remove it from the waiting list.
+            new CancellationTokenSource(1000 * 60).Token.Register(() => { _waitingRemoteInvocations[socketId].Remove(invocationDescriptor.Id); task.TrySetCanceled(); });
+            if (!_waitingRemoteInvocations.ContainsKey(socketId))
+            {
+                _waitingRemoteInvocations[socketId] = new Dictionary<long, TaskCompletionSource<InvocationResult>>();
+            }
+            _waitingRemoteInvocations[socketId].Add(invocationDescriptor.Id, task);
+
+            // send the method invocation to the client.
+            var message = new Message() {
+                MessageType = MessageType.MethodInvocation,
+                //Data = JsonConvert.SerializeObject(invocationDescriptor, _jsonSerializerSettings)
+                Data = JsonConvert.SerializeObject(invocationDescriptor)
+            };
+            await SendMessageAsync(socketId, message).ConfigureAwait(false);
+
+            // wait for the return value elsewhere in the program.
+            InvocationResult result = await task.Task;
+
+            // ... we just got an answer.
+
+            // if we have completed successfully:
+            if (task.Task.IsCompleted)
+            {
+                // there was a remote exception so we throw it here.
+                if (result.Exception != null)
+                    throw new Exception(result.Exception.Message);
+
+                // return the value.
+
+                // support null.
+                if (result.Result == null) return default(T);
+                // cast anything to T and hope it works.
+                return (T)result.Result;
+            }
+
+            // if we reach here we got cancelled or alike so throw a timeout exception.
+            throw new TimeoutException(); // todo: insert fancy message here.
+        }
+
+        public async Task InvokeClientMethodToAllAsync(string methodName, object[] arguments)
+        {
+            foreach (var pair in WebSocketConnectionManager.GetAll())
+            {
+                try
+                {
+                    if (pair.Value.WebSocket.State == WebSocketState.Open)
+                        await InvokeClientMethodAsync(pair.Key, methodName, arguments).ConfigureAwait(false);
+                }
+                catch (WebSocketException e)
+                {
+                    if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+                    {
+                        await OnDisconnected(pair.Value);
+                    }
+                }
+            }
+        }
+
+        public async Task InvokeClientMethodToGroupAsync(string groupID, string methodName, params object[] arguments)
+        {
+            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
+            if (sockets != null)
+            {
+                foreach (var id in sockets)
+                {
+                    await InvokeClientMethodAsync(id, methodName, arguments);
+                }
+            }
+        }
+
+        public async Task InvokeClientMethodToGroupAsync(string groupID, string methodName, string except, params object[] arguments)
+        {
+            var sockets = WebSocketConnectionManager.GetAllFromGroup(groupID);
+            if (sockets != null)
+            {
+                foreach (var id in sockets)
+                {
+                    if (id != except)
+                        await InvokeClientMethodAsync(id, methodName, arguments);
+                }
+            }
         }
 
         public async Task InvokeClientMethodOnlyAsync(string socketId, string method) => await InvokeClientMethodAsync(socketId, method, new object[] { });

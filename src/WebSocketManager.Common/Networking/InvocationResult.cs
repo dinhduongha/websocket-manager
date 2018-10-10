@@ -16,18 +16,18 @@ namespace WebSocketManager.Common
         public string JsonRpc { get; set; } = "2.0";
 
         /// <summary>
-        /// Gets or sets the name of the remote method.
-        /// </summary>
-        /// <value>The name of the remote method.</value>
-        [JsonProperty("method")]
-        public string MethodName { get; set; }
-
-        /// <summary>
         /// Gets or sets the unique identifier associated with the invocation.
         /// </summary>
         /// <value>The unique identifier of the invocation.</value>
         [JsonProperty("id")]
-        public Int64 Id { get; set; }
+        public long Id { get; set; }
+
+        /// <summary>
+        /// Gets or sets the name of the remote method.
+        /// </summary>
+        /// <value>The name of the remote method.</value>
+        [JsonProperty("method", NullValueHandling = NullValueHandling.Ignore)]
+        public string MethodName { get; set; }
 
         /// <summary>
         /// Gets or sets the result of the method call.

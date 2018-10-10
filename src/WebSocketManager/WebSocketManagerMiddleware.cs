@@ -50,14 +50,14 @@ namespace WebSocketManager
                 {
                     //Message message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);
                     //await _webSocketHandler.ReceivedTextAsync(webSocketConnection, result, message).ConfigureAwait(false);
-                    await _webSocketHandler.ReceivedTextAsync(webSocketConnection, serializedMessage).ConfigureAwait(false);
+                    await _webSocketHandler.OnReceivedTextAsync(webSocketConnection, serializedMessage).ConfigureAwait(false);
                     return;
                 }
                 else if (result.MessageType == WebSocketMessageType.Binary)
                 {
                     try
                     {
-                        await _webSocketHandler.ReceivedBinaryAsync(webSocketConnection, serializedMessage);
+                        await _webSocketHandler.OnReceivedBinaryAsync(webSocketConnection, serializedMessage);
                     }
                     catch (WebSocketException)
                     {

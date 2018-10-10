@@ -16,6 +16,13 @@ namespace WebSocketManager.Common
         public string JsonRpc { get; set; } = "2.0";
 
         /// <summary>
+        /// Gets or sets the unique identifier used to associate return values with this call.
+        /// </summary>
+        /// <value>The unique identifier of the invocation.</value>
+        [JsonProperty("id")]
+        public long Id { get; set; } = 0;
+
+        /// <summary>
         /// Gets or sets the name of the remote method.
         /// </summary>
         /// <value>The name of the remote method.</value>
@@ -29,17 +36,10 @@ namespace WebSocketManager.Common
         [JsonProperty("params", NullValueHandling = NullValueHandling.Ignore)]
         public object Params { get; set; }
 
-        /// <summary>
-        /// Gets or sets the unique identifier used to associate return values with this call.
-        /// </summary>
-        /// <value>The unique identifier of the invocation.</value>
-        [JsonProperty("id")]
-        public Int64 Id { get; set; } = 0;
-
-        //[JsonProperty("error")]
+        //[JsonProperty("error", NullValueHandling = NullValueHandling.Ignore)]
         //public object Error { get; set; }
 
-        //[JsonProperty("result")]
+        //[JsonProperty("result", NullValueHandling = NullValueHandling.Ignore)]
         //public object Result { get; set; }
 
     }

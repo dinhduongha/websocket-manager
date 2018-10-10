@@ -30,17 +30,24 @@ namespace ChatApplication
         }
 
         // this method can be called from a client, doesn't return anything.
-        public async Task SendMessage(WebSocketConnection socket, string message)
+        public async Task SendMessage(string socket, string message)
         {
             // chat command.
             if (message == "/math")
             {
-                await AskClientToDoMath(socket);
+                await AskClientToDoMath(WebSocketConnectionManager.GetSocketById(socket));
             }
             else
             {
-                await InvokeClientMethodToAllAsync("receiveMessage", WebSocketConnectionManager.GetId(socket), message);
+                //await InvokeClientMethodToAllAsync("receiveMessage", socket, message);
             }
+        }
+
+        public object SendMessage1(string socket, object message)
+        {
+            // chat command.
+            InvokeClientMethodToAllAsync("receiveMessage", socket, message);
+            return null;
         }
 
         // this method can be called from a client, returns the integer result or throws an exception.

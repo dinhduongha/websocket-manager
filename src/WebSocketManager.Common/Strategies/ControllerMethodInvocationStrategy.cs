@@ -81,13 +81,17 @@ namespace WebSocketManager.Common
             MethodInfo method = Controller.GetType().GetMethod(command);
             // if the method could not be found:
             if (method == null) throw new Exception($"Received unknown command '{command}' for controller '{Controller.GetType().Name}'.");
-            List<object> args = new List<object>();            
+            List<object> args = new List<object>();
             if (invocationDescriptor.Params is JArray)
             {
                 JArray array = (JArray)invocationDescriptor.Params;
                 args = array.ToObject<List<object>>();
             }
             else if (invocationDescriptor.Params is JObject)
+            {
+                args.Add(invocationDescriptor.Params as object);
+            }
+            else
             {
                 args.Add(invocationDescriptor.Params as object);
             }
