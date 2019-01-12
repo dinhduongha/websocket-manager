@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\WebSocketManager.Common\WebSocketManager.Common.csproj" />
+    <ProjectReference Include="..\Bamboo.WebSocketManager.Common\Bamboo.WebSocketManager.Common.csproj" />
   </ItemGroup>
 
 </Project>
