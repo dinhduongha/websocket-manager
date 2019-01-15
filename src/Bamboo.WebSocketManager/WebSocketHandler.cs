@@ -104,12 +104,14 @@ namespace Bamboo.WebSocketManager
 
         public virtual async Task OnReceivedTextAsync(WebSocketConnection socket, string serializedMessage)
         {
+            JObject jObject = null;
             InvocationDescriptor invocationDescriptor = null;
             try
             {
-                invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
-                //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage, _jsonSerializerSettings);
-                if (invocationDescriptor == null) return;
+                jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(serializedMessage);
+                //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
+                invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
+                //if (invocationDescriptor == null) return;
             }
             catch (Exception ex)
             {
@@ -117,7 +119,7 @@ namespace Bamboo.WebSocketManager
                 return;
             } 
             // method invocation request.
-            if (invocationDescriptor.Params != null)
+            if (invocationDescriptor != null && invocationDescriptor.Params != null)
             {
                 await PreRpcRequest(socket, invocationDescriptor, serializedMessage).ConfigureAwait(false);
                 // retrieve the method invocation request.               
@@ -158,15 +160,12 @@ namespace Bamboo.WebSocketManager
                         var str = e.Message;
                     }
                 }
-                await PostRpcRequest(socket, invocationDescriptor,serializedMessage).ConfigureAwait(false);
+                await PostRpcRequest(socket, invocationDescriptor, serializedMessage).ConfigureAwait(false);
             }
             else
             {
                 try
                 {
-                    JObject jObject = null;
-                    jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(serializedMessage);
-
                     //var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
                     var invocationResult = jObject.ToObject<InvocationResult>();
                     if ((invocationResult != null) && (invocationResult.Exception != null || invocationResult.Result != null))
