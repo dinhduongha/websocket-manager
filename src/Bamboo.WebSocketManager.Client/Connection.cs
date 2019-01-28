@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Bamboo.WebSocketManager.Common;
+using Newtonsoft.Json.Linq;
 
 namespace Bamboo.WebSocketManager
 {
@@ -62,32 +63,44 @@ namespace Bamboo.WebSocketManager
 
             await Receive(_clientWebSocket, async (receivedMessage) =>
             {
-                if (receivedMessage.MessageType == MessageType.ConnectionEvent)
+                JObject jObject = null;
+                InvocationDescriptor invocationDescriptor = null;
+                try
                 {
-                    this.ConnectionId = receivedMessage.Data;
+                    jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(receivedMessage);
+                    //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
+                    invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
+                    //if (invocationDescriptor == null) return;
                 }
-                else if (receivedMessage.MessageType == MessageType.MethodInvocation)
+                catch (Exception ex)
                 {
-                    // retrieve the method invocation request.
-                    InvocationDescriptor invocationDescriptor = null;
+                    // ignore invalid data sent to the server.
+                }
+                if(jObject == null)
+                {
                     try
                     {
-                        invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(receivedMessage.Data, _jsonSerializerSettings);
-                        if (invocationDescriptor == null) return;
+                        var obj = MethodInvocationStrategy.OnTextReceivedAsync("", receivedMessage);
                     }
-                    catch { return; } // ignore invalid data sent to the client.
+                    catch(Exception ex)
+                    {
 
-                    // if the unique identifier hasn't been set then the server doesn't want a return value.
+                    }
+                    return;
+                }
+                if (invocationDescriptor != null && invocationDescriptor.Params != null)
+                {
                     if (invocationDescriptor.Id == 0)
                     {
                         // invoke the method only.
                         try
                         {
-                            //await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(_clientWebSocket, invocationDescriptor);
+                            await MethodInvocationStrategy.OnInvokeMethodReceivedAsync("", invocationDescriptor);
                         }
                         catch (Exception)
                         {
-                            // we consume all exceptions.
+                            // we consume all exceptions.                            
+                            return;
                         }
                     }
                     else
@@ -100,7 +113,7 @@ namespace Bamboo.WebSocketManager
                             invokeResult = new InvocationResult()
                             {
                                 Id = invocationDescriptor.Id,
-                                //Result = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(_clientWebSocket, invocationDescriptor),
+                                Result = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync("", invocationDescriptor),
                                 Exception = null
                             };
                         }
@@ -125,16 +138,26 @@ namespace Bamboo.WebSocketManager
                         await _clientWebSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None).ConfigureAwait(false);
                     }
                 }
-                else if (receivedMessage.MessageType == MessageType.MethodReturnValue)
+                else 
                 {
-                    var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(receivedMessage.Data, _jsonSerializerSettings);
-                    // find the completion source in the waiting list.
-                    if (_waitingRemoteInvocations.ContainsKey(invocationResult.Id))
+                    try
                     {
-                        // set the result of the completion source so the invoke method continues executing.
-                        _waitingRemoteInvocations[invocationResult.Id].SetResult(invocationResult);
-                        // remove the completion source from the waiting list.
-                        _waitingRemoteInvocations.Remove(invocationResult.Id);
+                        var invocationResult = jObject.ToObject<InvocationResult>();
+                        if ((invocationResult != null) && (invocationResult.Exception != null || invocationResult.Result != null))
+                        {
+                            // find the completion source in the waiting list.
+                            if (_waitingRemoteInvocations.ContainsKey(invocationResult.Id))
+                            {
+                                // set the result of the completion source so the invoke method continues executing.
+                                _waitingRemoteInvocations[invocationResult.Id].SetResult(invocationResult);
+                                // remove the completion source from the waiting list.
+                                _waitingRemoteInvocations.Remove(invocationResult.Id);
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        var str = e.Message;
                     }
                 }
             });
@@ -201,7 +224,7 @@ namespace Bamboo.WebSocketManager
             await _clientWebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
         }
 
-        private async Task Receive(ClientWebSocket clientWebSocket, Action<Message> handleMessage)
+        private async Task Receive(ClientWebSocket clientWebSocket, Action<string> handleMessage)
         {
             while (_clientWebSocket.State == WebSocketState.Open)
             {
@@ -227,22 +250,27 @@ namespace Bamboo.WebSocketManager
 
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
-                    var message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);
-                    handleMessage(message);
+                    //var message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);
+                    try
+                    {
+                        handleMessage(serializedMessage);
+                    }
+                    catch (Exception ex)
+                    { }
                 }
                 else if (result.MessageType == WebSocketMessageType.Close)
                 {
                     await _clientWebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
+                    _clientWebSocket = null;
                     break;
                 }
             }
         }
-
+        
+        public async Task SendOnlyAsync(string method) => await SendAsync(new InvocationDescriptor { MethodName = method, Params = new object[] { } });
+        
+        public async Task SendOnlyAsync<T1>(string method, T1 arg1) => await SendAsync(new InvocationDescriptor { MethodName = method, Params = new object[] { arg1 } });
         /*
-        public async Task SendOnlyAsync(string method) => await SendAsync(new InvocationDescriptor { MethodName = method, Arguments = new object[] { } });
-
-        public async Task SendOnlyAsync<T1>(string method, T1 arg1) => await SendAsync(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1 } });
-
         public async Task SendOnlyAsync<T1, T2>(string method, T1 arg1, T2 arg2) => await SendAsync(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1, arg2 } });
 
         public async Task SendOnlyAsync<T1, T2, T3>(string method, T1 arg1, T2 arg2, T3 arg3) => await SendAsync(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1, arg2, arg3 } });
@@ -272,11 +300,12 @@ namespace Bamboo.WebSocketManager
         public async Task SendOnlyAsync<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>(string method, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7, T8 arg8, T9 arg9, T10 arg10, T11 arg11, T12 arg12, T13 arg13, T14 arg14, T15 arg15) => await SendAsync(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15 } });
 
         public async Task SendOnlyAsync<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16>(string method, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7, T8 arg8, T9 arg9, T10 arg10, T11 arg11, T12 arg12, T13 arg13, T14 arg14, T15 arg15, T16 arg16) => await SendAsync(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16 } });
+        */
+        
+        public async Task<Result> SendAsync<Result>(string method) => await SendAsync<Result>(new InvocationDescriptor { MethodName = method, Params = new object[] { } });
 
-        public async Task<Result> SendAsync<Result>(string method) => await SendAsync<Result>(new InvocationDescriptor { MethodName = method, Arguments = new object[] { } });
-
-        public async Task<Result> SendAsync<Result, T1>(string method, T1 arg1) => await SendAsync<Result>(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1 } });
-
+        public async Task<Result> SendAsync<Result, T1>(string method, T1 arg1) => await SendAsync<Result>(new InvocationDescriptor { MethodName = method, Params = new object[] { arg1 } });
+        /*
         public async Task<Result> SendAsync<Result, T1, T2>(string method, T1 arg1, T2 arg2) => await SendAsync<Result>(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1, arg2 } });
 
         public async Task<Result> SendAsync<Result, T1, T2, T3>(string method, T1 arg1, T2 arg2, T3 arg3) => await SendAsync<Result>(new InvocationDescriptor { MethodName = method, Arguments = new object[] { arg1, arg2, arg3 } });
