@@ -106,20 +106,47 @@ namespace Bamboo.WebSocketManager
         {
             JObject jObject = null;
             InvocationDescriptor invocationDescriptor = null;
+            InvocationResult invocationResult = null;
             try
             {
-                jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(serializedMessage);
-                //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
-                invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
-                //if (invocationDescriptor == null) return;
+                jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(serializedMessage);                
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
                 // ignore invalid data sent to the server.
+                //socket.WebSocket.CloseOutputAsync();
                 return;
-            } 
+            }
+            try
+            {
+                invocationResult = jObject.ToObject<InvocationResult>();
+                if ((invocationResult != null) && (invocationResult.Exception != null || invocationResult.Result != null))
+                {
+                    await PreRpcResponse(socket, invocationResult, serializedMessage).ConfigureAwait(false);
+                    await OnResponseAsync(socket, invocationResult);
+                    await PostRpcResponse(socket, invocationResult, serializedMessage).ConfigureAwait(false);
+                    return;
+                }
+                //else
+                //{
+                //    await OnUnknownAsync(socket, jObject);
+                //}                
+            }
+            catch (Exception e)
+            {
+                //var str = e.Message;
+            }
+            try
+            {
+                //var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
+                invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
+            }
+            catch (Exception e)
+            {
+                //var str = e.Message;
+            }
             // method invocation request.
-            if (invocationDescriptor != null && invocationDescriptor.Params != null)
+            if (invocationDescriptor != null)
             {
                 await PreRpcRequest(socket, invocationDescriptor, serializedMessage).ConfigureAwait(false);
                 // retrieve the method invocation request.               
@@ -157,32 +184,13 @@ namespace Bamboo.WebSocketManager
                     }
                     catch (Exception e)
                     {
-                        var str = e.Message;
                     }
                 }
                 await PostRpcRequest(socket, invocationDescriptor, serializedMessage).ConfigureAwait(false);
             }
             else
             {
-                try
-                {
-                    //var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
-                    var invocationResult = jObject.ToObject<InvocationResult>();
-                    if ((invocationResult != null) && (invocationResult.Exception != null || invocationResult.Result != null))
-                    {
-                        await PreRpcResponse(socket, invocationResult, serializedMessage).ConfigureAwait(false);
-                        await OnResponseAsync(socket, invocationResult);
-                        await PostRpcResponse(socket, invocationResult, serializedMessage).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await OnUnknownAsync(socket, jObject);
-                    }
-                }
-                catch (Exception e)
-                {
-                    var str = e.Message;
-                }
+                await OnUnknownAsync(socket, jObject);
             }
         }
 
