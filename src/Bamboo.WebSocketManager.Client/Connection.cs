@@ -223,14 +223,14 @@ namespace Bamboo.WebSocketManager
             {
                 return IsStarted;
             }            
-
             _cancelation = new CancellationTokenSource();
             _cancelationTotal = new CancellationTokenSource();
             _url = uri;
             _token = token;
-            await StartClient(new Uri(_url), _cancelation.Token, ReconnectionType.Initial);
-            StartBackgroundThreadForSending();
             IsStarted = true;
+            await StartClient(new Uri(_url), _cancelation.Token, ReconnectionType.Initial).ConfigureAwait(false);
+            StartBackgroundThreadForSending();
+            
             await Task.CompletedTask;
             return IsStarted;
         }
@@ -256,7 +256,6 @@ namespace Bamboo.WebSocketManager
             try
             {
                 //await _clientWebSocket.ConnectAsync(uri, CancellationToken.None).ConfigureAwait(false);
-                //await _clientWebSocket.ConnectAsync(uri, CancellationToken.None).ConfigureAwait(false);
                 await _clientWebSocket.ConnectAsync(uri, token).ConfigureAwait(false);
                 OnConnect?.Invoke(this, EventArgs.Empty);
                 IsRunning = true;
@@ -267,9 +266,9 @@ namespace Bamboo.WebSocketManager
                     try
                     {
                         jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(receivedMessage);
-                    //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
-                    invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
-                    //if (invocationDescriptor == null) return;
+                        //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
+                        invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
+                        //if (invocationDescriptor == null) return;
                     }
                     catch (Exception ex)
                     {
@@ -440,8 +439,11 @@ namespace Bamboo.WebSocketManager
         private async Task SendInternal(Message message)
         {            
             var buffer = Encoding.UTF8.GetBytes(message.Data);
-            var messageSegment = new ArraySegment<byte>(buffer);            
-            await _clientWebSocket.SendAsync(messageSegment, WebSocketMessageType.Text, true, _cancelation.Token).ConfigureAwait(false);
+            var messageSegment = new ArraySegment<byte>(buffer);
+            if (_clientWebSocket != null)
+            { 
+                await _clientWebSocket.SendAsync(messageSegment, WebSocketMessageType.Text, true, _cancelation.Token).ConfigureAwait(false);
+            }
         }
 
         private async Task SendFromQueue()
