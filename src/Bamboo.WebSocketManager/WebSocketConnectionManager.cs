@@ -14,7 +14,7 @@ namespace Bamboo.WebSocketManager
         private ConcurrentDictionary<string, List<string>> _groups = new ConcurrentDictionary<string, List<string>>();
 
         private ConcurrentDictionary<string, WebSocketConnection> _socketUids = new ConcurrentDictionary<string, WebSocketConnection>();
-        private ConcurrentDictionary<long, WebSocketConnection> _socketDids = new ConcurrentDictionary<long, WebSocketConnection>();
+        //private ConcurrentDictionary<long, WebSocketConnection> _socketDids = new ConcurrentDictionary<long, WebSocketConnection>();
 
         public string ulid;
         public WebSocketConnectionManager()
@@ -29,10 +29,7 @@ namespace Bamboo.WebSocketManager
         {
             return _socketUids.FirstOrDefault(p => p.Key == id).Value;
         }
-        public WebSocketConnection GetSocketByDId(long id)
-        {
-            return _socketDids.FirstOrDefault(p => p.Key == id).Value;
-        }
+        
         public ConcurrentDictionary<string, WebSocketConnection> GetAll()
         {
             return _sockets;
@@ -57,23 +54,23 @@ namespace Bamboo.WebSocketManager
         {
             _sockets.TryAdd(socket.Id, socket);
         }
-        public void AddSocket(long did, WebSocketConnection socket)
-        {
-            if (_sockets.ContainsKey(socket.Id) && did > 0)
-            {
-                socket.Did = did;
-                _socketDids.TryAdd(did, socket);
-            }
+        //public void AddSocket(long did, WebSocketConnection socket)
+        //{
+        //    if (_sockets.ContainsKey(socket.Id) && did > 0)
+        //    {
+        //        socket.Did = did;
+        //        _socketDids.TryAdd(did, socket);
+        //    }
 
-        }
-        public void AddSocketUid(string uid, WebSocketConnection socket)
-        {
-            if (_sockets.ContainsKey(socket.Id) && uid.Length > 0)
-            {
-                socket.Uid = uid;
-                _socketUids.TryAdd(uid, socket);
-            }
-        }
+        //}
+        //public void AddSocketUid(string uid, WebSocketConnection socket)
+        //{
+        //    if (_sockets.ContainsKey(socket.Id) && uid.Length > 0)
+        //    {
+        //        socket.Uid = uid;
+        //        _socketUids.TryAdd(uid, socket);
+        //    }
+        //}
 
         public void AddToGroup(string socketID, string groupID)
         {
@@ -101,15 +98,15 @@ namespace Bamboo.WebSocketManager
             var skt = GetSocketById(id);
             if (skt != null)
             {
-                WebSocketConnection socket2;
-                if (skt.Uid != null)
-                {
-                    _socketUids.TryRemove(skt.Uid, out socket2);
-                }
-                if (skt.Did > 0 )
-                {
-                    _socketDids.TryRemove(skt.Did, out socket2);
-                }
+                //WebSocketConnection socket2;
+                //if (skt.Uid != null)
+                //{
+                //    _socketUids.TryRemove(skt.Uid, out socket2);
+                //}
+                //if (skt.Did > 0 )
+                //{
+                //    _socketDids.TryRemove(skt.Did, out socket2);
+                //}
             }
             WebSocketConnection socket;
             _sockets.TryRemove(id, out socket);

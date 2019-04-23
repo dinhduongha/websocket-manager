@@ -14,18 +14,16 @@ namespace Bamboo.WebSocketManager
         private ConcurrentDictionary<string, object> _items = new ConcurrentDictionary<string, object>();
 
         // Connection ID
-        public string Id { get; }
-        public long Did { get; set; }
-        public string Uid { get; set; }
+        public string Id { get; }        
         public bool IsAuthorized { get; set; }
 
-        private long _cmdId = 0;    // Inc when send command to client
+        private long _cmdId = 0;    // Increase when send command to client
 
         public WebSocketConnection(Microsoft.AspNetCore.Http.HttpContext context, WebSocket webSocket)
         {
             Id = Ulid.NewUlid().ToString();
             HttpConntext = context;
-            WebSocket = webSocket;
+            WebSocket = webSocket;            
         }
 
         public ConcurrentDictionary<string, object> Items()

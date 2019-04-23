@@ -63,12 +63,6 @@ namespace Bamboo.WebSocketManager
         public virtual async Task OnConnected(WebSocketConnection socket)
         {
             WebSocketConnectionManager.AddSocket(socket);
-
-            //await SendMessageAsync(socket, new Message()
-            //{
-            //    MessageType = MessageType.ConnectionEvent,
-            //    Data = WebSocketConnectionManager.GetId(socket)
-            //}).ConfigureAwait(false);
             await Task.CompletedTask;
         }
 
@@ -87,7 +81,7 @@ namespace Bamboo.WebSocketManager
             await Task.CompletedTask;
         }
 
-        public virtual async Task PostRpcRequest(WebSocketConnection socket, InvocationDescriptor invocationDescriptor, string message)
+        public virtual async Task PostRpcRequest(WebSocketConnection socket, InvocationDescriptor invocationDescriptor, long elapse, string message, string response)
         {
             await Task.CompletedTask;
         }
@@ -102,6 +96,28 @@ namespace Bamboo.WebSocketManager
             await Task.CompletedTask;
         }
 
+        public virtual async Task OnPeerResponseAsync(WebSocketConnection socket, InvocationResult invocationResult, string message)
+        {
+            var socketId = WebSocketConnectionManager.GetId(socket);
+            try
+            {
+                if (_waitingRemoteInvocations.ContainsKey(socketId) && invocationResult.Id > 0)
+                {
+                    if (_waitingRemoteInvocations[socketId].ContainsKey(invocationResult.Id))
+                    {
+                        _waitingRemoteInvocations[socketId][invocationResult.Id].SetResult(invocationResult);
+                        // remove the completion source from the waiting list.
+                    }
+                    _waitingRemoteInvocations[socketId].Remove(invocationResult.Id);
+                }
+            }
+            catch (Exception e)
+            {
+                var str = e.Message;
+            }
+            await Task.CompletedTask;
+        }
+
         public virtual async Task OnReceivedTextAsync(WebSocketConnection socket, string serializedMessage)
         {
             JObject jObject = null;
@@ -109,7 +125,7 @@ namespace Bamboo.WebSocketManager
             InvocationResult invocationResult = null;
             try
             {
-                jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(serializedMessage);                
+                jObject = JsonConvert.DeserializeObject<JObject>(serializedMessage);                
             }
             catch (Exception e)
             {
@@ -123,31 +139,28 @@ namespace Bamboo.WebSocketManager
                 if ((invocationResult != null) && (invocationResult.Exception != null || invocationResult.Result != null))
                 {
                     await PreRpcResponse(socket, invocationResult, serializedMessage).ConfigureAwait(false);
-                    await OnResponseAsync(socket, invocationResult);
+                    await OnPeerResponseAsync(socket, invocationResult, serializedMessage);
                     await PostRpcResponse(socket, invocationResult, serializedMessage).ConfigureAwait(false);
                     return;
                 }
-                //else
-                //{
-                //    await OnUnknownAsync(socket, jObject);
-                //}                
             }
             catch (Exception e)
             {
-                //var str = e.Message;
+                // Ignore if is not jsonrpc result
             }
             try
             {
-                //var invocationResult = JsonConvert.DeserializeObject<InvocationResult>(serializedMessage, _jsonSerializerSettings);
                 invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
             }
             catch (Exception e)
             {
-                //var str = e.Message;
+                // Not jsonrpc request
+                //return;
             }
             // method invocation request.
             if (invocationDescriptor != null)
             {
+                DateTimeOffset now = DateTimeOffset.Now;
                 await PreRpcRequest(socket, invocationDescriptor, serializedMessage).ConfigureAwait(false);
                 // retrieve the method invocation request.               
                 // if the unique identifier hasn't been set then the client doesn't want a return value.
@@ -157,6 +170,8 @@ namespace Bamboo.WebSocketManager
                     try
                     {
                         var result = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket.Id, invocationDescriptor);
+                        long elapse = (long)(DateTimeOffset.Now - now).TotalMilliseconds;
+                        await PostRpcRequest(socket, invocationDescriptor, elapse, serializedMessage, null).ConfigureAwait(false);
                     }
                     catch (Exception e)
                     {
@@ -180,45 +195,27 @@ namespace Bamboo.WebSocketManager
                                 //Data = JsonConvert.SerializeObject(invokeResult, _jsonSerializerSettings)
                             };
                             await SendMessageAsync(socket, message).ConfigureAwait(false);
+                            long elapse = (long)(DateTimeOffset.Now - now).TotalMilliseconds;
+                            await PostRpcRequest(socket, invocationDescriptor, elapse, serializedMessage, null);
                         }
                     }
                     catch (Exception e)
                     {
                     }
                 }
-                await PostRpcRequest(socket, invocationDescriptor, serializedMessage).ConfigureAwait(false);
+                
             }
             else
             {
                 await OnUnknownAsync(socket, jObject);
             }
         }
-
-        public virtual async Task OnResponseAsync(WebSocketConnection socket, InvocationResult invocationResult)
-        {
-            var socketId = WebSocketConnectionManager.GetId(socket);
-            try
-            {
-                if (_waitingRemoteInvocations.ContainsKey(socketId) && invocationResult.Id > 0)
-                {
-                    if (_waitingRemoteInvocations[socketId].ContainsKey(invocationResult.Id))
-                    {
-                        _waitingRemoteInvocations[socketId][invocationResult.Id].SetResult(invocationResult);
-                        // remove the completion source from the waiting list.
-                    }
-                    _waitingRemoteInvocations[socketId].Remove(invocationResult.Id);
-                }
-            }
-            catch (Exception e)
-            {
-                var str = e.Message;
-            }
-            await Task.CompletedTask;
-        }
+        
         public virtual async Task OnUnknownAsync(WebSocketConnection socket, JObject jObject)
         {
             await Task.CompletedTask;
         }
+
         public virtual async Task OnReceivedBinaryAsync(WebSocketConnection socket, string receivedMessage)
         {
             await Task.CompletedTask;
@@ -229,8 +226,6 @@ namespace Bamboo.WebSocketManager
             if (socket.WebSocket.State != WebSocketState.Open)
                 return;
 
-            //var serializedMessage = JsonConvert.SerializeObject(message, _jsonSerializerSettings);
-            //var encodedMessage = Encoding.UTF8.GetBytes(serializedMessage);
             var encodedMessage = Encoding.UTF8.GetBytes(message.Data);
             try
             {

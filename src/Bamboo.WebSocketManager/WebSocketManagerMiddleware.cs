@@ -45,15 +45,16 @@ namespace Bamboo.WebSocketManager
 
             var socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
             var webSocketConnection = new WebSocketConnection(context, socket);
+            //await _webSocketHandler.OnConnected(webSocketConnection);
             await _webSocketHandler.OnConnected(webSocketConnection).ConfigureAwait(false);
 
             await Receive(webSocketConnection, async (result, serializedMessage) =>
             {
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
-                    //Message message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);
-                    //await _webSocketHandler.ReceivedTextAsync(webSocketConnection, result, message).ConfigureAwait(false);
+                    //Message message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);                    
                     await _webSocketHandler.OnReceivedTextAsync(webSocketConnection, serializedMessage).ConfigureAwait(false);
+                    //await _webSocketHandler.OnReceivedTextAsync(webSocketConnection, serializedMessage);
                     return;
                 }
                 else if (result.MessageType == WebSocketMessageType.Binary)
