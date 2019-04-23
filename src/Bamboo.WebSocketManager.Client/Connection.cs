@@ -217,20 +217,22 @@ namespace Bamboo.WebSocketManager
             _jsonSerializerSettings.Converters.Insert(0, new PrimitiveJsonConverter());
         }
 
-        public async Task StartConnectionAsync(string uri, string token = "")
+        public async Task<bool> StartConnectionAsync(string uri, string token = "")
         {   
             if (IsStarted)
             {
-                return;
-            }
-            IsStarted = true;
-
+                return IsStarted;
+            }            
             _cancelation = new CancellationTokenSource();
             _cancelationTotal = new CancellationTokenSource();
             _url = uri;
             _token = token;
-            await StartClient(new Uri(_url), _cancelation.Token, ReconnectionType.Initial);
+            IsStarted = true;
+            await StartClient(new Uri(_url), _cancelation.Token, ReconnectionType.Initial).ConfigureAwait(false);
             StartBackgroundThreadForSending();
+            
+            await Task.CompletedTask;
+            return IsStarted;
         }
 
         private async Task StartClient(Uri uri, CancellationToken token, ReconnectionType type)
@@ -250,10 +252,9 @@ namespace Bamboo.WebSocketManager
                 }
             }
             // don't do anything, we are already connected.
-            else return;
-
+            else return;            
             try
-            {                
+            {
                 //await _clientWebSocket.ConnectAsync(uri, CancellationToken.None).ConfigureAwait(false);
                 await _clientWebSocket.ConnectAsync(uri, token).ConfigureAwait(false);
                 OnConnect?.Invoke(this, EventArgs.Empty);
@@ -264,10 +265,10 @@ namespace Bamboo.WebSocketManager
                     InvocationDescriptor invocationDescriptor = null;                    
                     try
                     {
-                        jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(receivedMessage);
-                    //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
-                    invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
-                    //if (invocationDescriptor == null) return;
+                        jObject = Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(receivedMessage);
+                        //invocationDescriptor = JsonConvert.DeserializeObject<InvocationDescriptor>(serializedMessage);
+                        invocationDescriptor = jObject.ToObject<InvocationDescriptor>();
+                        //if (invocationDescriptor == null) return;
                     }
                     catch (Exception ex)
                     {
@@ -364,6 +365,7 @@ namespace Bamboo.WebSocketManager
             }
             catch(Exception e)
             {
+                Console.WriteLine($"{DateTime.Now} _clientWebSocket.ConnectAsync Exception: {e.Message}");
                 IsRunning = false;
                 await Task.Delay(ErrorReconnectTimeoutMs, _cancelation.Token).ConfigureAwait(false);
                 await Reconnect(ReconnectionType.Error).ConfigureAwait(false);
@@ -437,8 +439,11 @@ namespace Bamboo.WebSocketManager
         private async Task SendInternal(Message message)
         {            
             var buffer = Encoding.UTF8.GetBytes(message.Data);
-            var messageSegment = new ArraySegment<byte>(buffer);            
-            await _clientWebSocket.SendAsync(messageSegment, WebSocketMessageType.Text, true, _cancelation.Token).ConfigureAwait(false);
+            var messageSegment = new ArraySegment<byte>(buffer);
+            if (_clientWebSocket != null)
+            { 
+                await _clientWebSocket.SendAsync(messageSegment, WebSocketMessageType.Text, true, _cancelation.Token).ConfigureAwait(false);
+            }
         }
 
         private async Task SendFromQueue()
@@ -568,7 +573,10 @@ namespace Bamboo.WebSocketManager
 
         public async Task StopConnectionAsync()
         {
-            await _clientWebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
+            if (_clientWebSocket != null)
+            {
+                await _clientWebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
+            }
         }
 
         private async Task Receive(ClientWebSocket clientWebSocket, CancellationToken token, Action<string> handleMessage)
@@ -599,7 +607,7 @@ namespace Bamboo.WebSocketManager
                                 serializedMessage = await reader.ReadToEndAsync().ConfigureAwait(false);
                             }
                             OnTextMessage?.Invoke(this, new TextMessageEventArgs(serializedMessage));
-                            handleMessage(serializedMessage);
+                            //handleMessage(serializedMessage);
                         }
                         catch (Exception e)
                         {
