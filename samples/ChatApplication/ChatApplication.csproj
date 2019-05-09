@@ -6,10 +6,10 @@
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <OutputPath>..\..\..\websocke t-manager\samples\ChatApplication\bin\Debug\netcoreapp2.0</OutputPath>
+    <OutputPath>..\..\..\websocket-manager\samples\ChatApplication\bin\Debug\netcoreapp2.0</OutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <OutputPath>..\..\..\websocke t-manager\samples\ChatApplication\bin\Release\netcoreapp2.0</OutputPath>
+    <OutputPath>..\..\..\websocket-manager\samples\ChatApplication\bin\Release\netcoreapp2.0</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebSocketManager\WebSocketManager.csproj" />
