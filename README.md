@@ -1,6 +1,8 @@
 # What's news
--C# ASP.NET Core JsonRPC over websocket.
--Add JsonRpcServer example.
+C# ASP.NET Core JsonRPC over websocket.
+
+Add JsonRpcServer example.
+
 # websocket-manager
 
 Travis: [![Build Status](https://travis-ci.org/radu-matei/websocket-manager.svg?branch=master)](https://travis-ci.org/radu-matei/websocket-manager)
