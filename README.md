@@ -3,6 +3,22 @@ C# ASP.NET Core JsonRPC over websocket.
 
 Add JsonRpcServer example.
 
+# Howto JsonRPC
+
+Run JsonRpcServer example, then let client connect to
+
+```
+http://localhost:port/iot/device
+```
+Client send request, ex:
+
+```
+{"jsonrpc":"2.0","id":1,"method":"state","params":{"ulid": "01DAE1DTQWBAAHE1942APVTHPJ", "epoch":0, "red":0, "green": 0, "yellow": 3}}
+```
+Will receive:
+```
+{"jsonrpc":"2.0","id":1,"method":"state","result":{"success":true}}
+```
 # websocket-manager
 
 Travis: [![Build Status](https://travis-ci.org/radu-matei/websocket-manager.svg?branch=master)](https://travis-ci.org/radu-matei/websocket-manager)
