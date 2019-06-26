@@ -73,7 +73,7 @@ namespace Bamboo.WebSocketManager
                 {
                     try
                     {
-                        await _webSocketHandler.OnDisconnected(webSocketConnection);
+                        //await _webSocketHandler.OnDisconnected(webSocketConnection);
                     }
                     catch (WebSocketException)
                     {

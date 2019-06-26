@@ -16,14 +16,15 @@ namespace Bamboo.WebSocketManager
         // Connection ID
         public string Id { get; }        
         public bool IsAuthorized { get; set; }
-
+        public DateTimeOffset ConnectedTime { get; } = DateTimeOffset.Now;
         private long _cmdId = 0;    // Increase when send command to client
 
         public WebSocketConnection(Microsoft.AspNetCore.Http.HttpContext context, WebSocket webSocket)
         {
             Id = Ulid.NewUlid().ToString();
             HttpConntext = context;
-            WebSocket = webSocket;            
+            WebSocket = webSocket;
+            ConnectedTime = DateTimeOffset.Now;
         }
 
         public ConcurrentDictionary<string, object> Items()
