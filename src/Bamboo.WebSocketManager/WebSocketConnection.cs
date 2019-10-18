@@ -13,6 +13,7 @@ namespace Bamboo.WebSocketManager
         public  WebSocket WebSocket { get; set; }
         private ConcurrentDictionary<string, object> _items = new ConcurrentDictionary<string, object>();
 
+        public Guid Guid { get; set; }
         // Connection ID
         public string Id { get; }        
         public bool IsAuthorized { get; set; }
@@ -30,6 +31,11 @@ namespace Bamboo.WebSocketManager
         public ConcurrentDictionary<string, object> Items()
         {
             return _items;
+        }
+
+        public void SetRefGuid(Guid guid)
+        {
+            Guid = guid;
         }
 
         public void SetItem(string key, object value)

@@ -88,7 +88,7 @@ namespace Bamboo.WebSocketManager
         {
             while (socket.WebSocket.State == WebSocketState.Open)
             {
-                ArraySegment<Byte> buffer = new ArraySegment<byte>(new Byte[1024 * 4]);
+                ArraySegment<Byte> buffer = new ArraySegment<byte>(new Byte[1024 * 8]);
                 string message = null;
                 WebSocketReceiveResult result = null;
                 try
@@ -117,11 +117,13 @@ namespace Bamboo.WebSocketManager
                     if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
                     {
                         socket.WebSocket.Abort();
+                        break;
                     }
                 }
             }
 
             await _webSocketHandler.OnDisconnected(socket);
+            //socket.WebSocket.Abort();
         }
     }
 }
