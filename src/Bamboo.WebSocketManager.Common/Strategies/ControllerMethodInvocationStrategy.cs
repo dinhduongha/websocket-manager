@@ -80,7 +80,8 @@ namespace Bamboo.WebSocketManager.Common
             // use reflection to find the method in the desired controller.
             MethodInfo method = Controller.GetType().GetMethod(command);
             // if the method could not be found:
-            if (method == null) throw new Exception($"Received unknown command '{command}' for controller '{Controller.GetType().Name}'.");
+            if (method == null) 
+                throw new Exception($"Received unknown command '{command}' for controller '{Controller.GetType().Name}'.");
             List<object> args = new List<object>();
             if (invocationDescriptor.Params is JArray)
             {   

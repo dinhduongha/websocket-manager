@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace Bamboo.WebSocketManager
 {
@@ -16,9 +17,11 @@ namespace Bamboo.WebSocketManager
         private ConcurrentDictionary<string, WebSocketConnection> _socketUids = new ConcurrentDictionary<string, WebSocketConnection>();
         //private ConcurrentDictionary<long, WebSocketConnection> _socketDids = new ConcurrentDictionary<long, WebSocketConnection>();
 
+        private ILogger<WebSocketConnectionManager> _logger;
         public string ulid;
-        public WebSocketConnectionManager()
+        public WebSocketConnectionManager(ILogger<WebSocketConnectionManager> logger)
         {
+            _logger = logger;
             ulid = NUlid.Ulid.NewUlid().ToGuid().ToString();
         }
         public WebSocketConnection GetSocketById(string id)
@@ -76,7 +79,10 @@ namespace Bamboo.WebSocketManager
         {
             if (_groups.ContainsKey(groupID))
             {
-                _groups[groupID].Add(socketID);
+                var list = _groups[groupID];
+                list.Add(socketID);
+                _groups[groupID] = list;
+                //_groups[groupID].Add(socketID);
 
                 return;
             }
@@ -88,7 +94,10 @@ namespace Bamboo.WebSocketManager
         {
             if (_groups.ContainsKey(groupID))
             {
-                _groups[groupID].Remove(socketID);
+                var list = _groups[groupID];
+                list.Remove(socketID);
+                _groups[groupID] = list;
+                //_groups[groupID].Remove(socketID);
             }
         }
 
@@ -110,13 +119,16 @@ namespace Bamboo.WebSocketManager
             }
             WebSocketConnection socket;
             _sockets.TryRemove(id, out socket);
-
-            if (socket.WebSocket.State != WebSocketState.Open) return;
-
-            await socket.WebSocket.CloseAsync(closeStatus: WebSocketCloseStatus.NormalClosure,
-                                    statusDescription: "Closed by the WebSocketManager",
-                                    cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                await socket.WebSocket.CloseAsync(closeStatus: WebSocketCloseStatus.NormalClosure,
+                                        statusDescription: "Closed by the WebSocketManager",
+                                        cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            }
+            catch(Exception e)
+            {
+                _logger.LogError(e, "Error closing socket");
+            }
         }
-
     }
 }

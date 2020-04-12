@@ -5,8 +5,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+
 using Bamboo.WebSocketManager.Common;
 
 namespace Bamboo.WebSocketManager
@@ -15,7 +18,7 @@ namespace Bamboo.WebSocketManager
     {
         private readonly RequestDelegate _next;
         private WebSocketHandler _webSocketHandler { get; set; }
-
+        private ILogger<WebSocketManagerMiddleware> _logger;
         private JsonSerializerSettings _jsonSerializerSettings = new JsonSerializerSettings()
         {
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -25,11 +28,13 @@ namespace Bamboo.WebSocketManager
         };
 
         public WebSocketManagerMiddleware(RequestDelegate next,
-                                          WebSocketHandler webSocketHandler)
+                                          WebSocketHandler webSocketHandler,
+                                          ILogger<WebSocketManagerMiddleware> logger)
         {
             _jsonSerializerSettings.Converters.Insert(0, new PrimitiveJsonConverter());
             _next = next;
             _webSocketHandler = webSocketHandler;
+            _logger = logger;
         }
 
         public async Task Invoke(HttpContext context)
@@ -43,12 +48,12 @@ namespace Bamboo.WebSocketManager
                 return;
             }
 
-            var socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
+            var socket = await context.WebSockets.AcceptWebSocketAsync();//.ConfigureAwait(false);
             var webSocketConnection = new WebSocketConnection(context, socket);
             //await _webSocketHandler.OnConnected(webSocketConnection);
             await _webSocketHandler.OnConnected(webSocketConnection).ConfigureAwait(false);
 
-            await Receive(webSocketConnection, async (result, serializedMessage) =>
+            await Receive(webSocketConnection, async (result, serializedMessage, bytes) =>
             {
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
@@ -61,7 +66,7 @@ namespace Bamboo.WebSocketManager
                 {
                     try
                     {
-                        await _webSocketHandler.OnReceivedBinaryAsync(webSocketConnection, serializedMessage);
+                        await _webSocketHandler.OnReceivedBinaryAsync(webSocketConnection, bytes);
                     }
                     catch (WebSocketException)
                     {
@@ -73,10 +78,12 @@ namespace Bamboo.WebSocketManager
                 {
                     try
                     {
-                        //await _webSocketHandler.OnDisconnected(webSocketConnection);
+                        _logger.LogInformation("Client close connection!");
+                        await _webSocketHandler.OnDisconnected(webSocketConnection);
                     }
-                    catch (WebSocketException)
+                    catch (WebSocketException e)
                     {
+                        _logger.LogError(e, "Error handling websocket response");
                         throw; //let's not swallow any exception for now
                     }
                     return;
@@ -84,12 +91,13 @@ namespace Bamboo.WebSocketManager
             });
         }
 
-        private async Task Receive(WebSocketConnection socket, Action<WebSocketReceiveResult, string> handleMessage)
+        private async Task Receive(WebSocketConnection socket, Action<WebSocketReceiveResult, string, byte[]> handleMessage)
         {
             while (socket.WebSocket.State == WebSocketState.Open)
             {
-                ArraySegment<Byte> buffer = new ArraySegment<byte>(new Byte[1024 * 8]);
+                ArraySegment<byte> buffer = new ArraySegment<byte>(new byte[1024 * 8]);
                 string message = null;
+                byte[] bytes = null;
                 WebSocketReceiveResult result = null;
                 try
                 {
@@ -97,20 +105,24 @@ namespace Bamboo.WebSocketManager
                     {
                         do
                         {
-                            result = await socket.WebSocket.ReceiveAsync(buffer, CancellationToken.None).ConfigureAwait(false);
+                            result = await socket.WebSocket.ReceiveAsync(buffer, CancellationToken.None); //.ConfigureAwait(false);
                             ms.Write(buffer.Array, buffer.Offset, result.Count);
                         }
                         while (!result.EndOfMessage);
-
                         ms.Seek(0, SeekOrigin.Begin);
-
-                        using (var reader = new StreamReader(ms, Encoding.UTF8))
+                        if (result.MessageType == WebSocketMessageType.Text)
                         {
-                            message = await reader.ReadToEndAsync().ConfigureAwait(false);
+                            using (var reader = new StreamReader(ms, Encoding.UTF8))
+                            {
+                                message = await reader.ReadToEndAsync().ConfigureAwait(false);
+                            }
+                        }
+                        else if (result.MessageType == WebSocketMessageType.Binary)
+                        {
+                            bytes = ms.ToArray();
                         }
                     }
-
-                    handleMessage(result, message);
+                    handleMessage(result, message, bytes);
                 }
                 catch (WebSocketException e)
                 {
@@ -121,7 +133,6 @@ namespace Bamboo.WebSocketManager
                     }
                 }
             }
-
             await _webSocketHandler.OnDisconnected(socket);
             //socket.WebSocket.Abort();
         }

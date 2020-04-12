@@ -37,7 +37,7 @@ namespace Bamboo.WebSocketManager
             return services;
         }
 
-        public static IApplicationBuilder MapWebSocketManager(this IApplicationBuilder app,
+        public static IApplicationBuilder UseWebSocketManager(this IApplicationBuilder app,
                                                               PathString path,
                                                               WebSocketHandler handler)
         {

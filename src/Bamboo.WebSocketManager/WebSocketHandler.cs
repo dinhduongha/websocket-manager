@@ -5,6 +5,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Reflection;
 using System.Collections.Generic;
+using System.IO;
+using System.Collections.Generic;
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -17,8 +21,69 @@ namespace Bamboo.WebSocketManager
     {
     }
 
-    public abstract class WebSocketHandler :  IWebSocketHandler
+    public abstract class WebSocketHandler :  IWebSocketHandler, IDisposable
     {
+        /*
+        * KeepAlive artifacts
+        */
+        Timer _pingTimer;
+        ConcurrentDictionary<string, DateTime> socketPongMap = new ConcurrentDictionary<string, DateTime>(2, 1);
+        ConcurrentDictionary<string, DateTime> socketPingMap = new ConcurrentDictionary<string, DateTime>(2, 1);
+
+        /// <summary>
+        /// If true, will send custom "ping" messages which must be answered with a ping message
+        /// Uses WebSocket.DefaultKeepAliveInterval as ping period
+        /// Sockets which have not responded to 3 pings will be disconnected
+        /// </summary>
+        public bool SendPingMessages { get; set; }
+
+        private async void OnPingTimer(object state)
+        {
+            if (SendPingMessages)
+            {
+                TimeSpan timeoutPeriod = TimeSpan.FromSeconds(WebSocket.DefaultKeepAliveInterval.TotalSeconds * 3);
+
+                foreach (var item in socketPongMap)
+                {
+                    if (item.Value < DateTime.Now.Subtract(timeoutPeriod))
+                    {
+                        var socket = WebSocketConnectionManager.GetSocketById(item.Key);
+                        if (socket.WebSocket.State == WebSocketState.Open)
+                        {
+                            await CloseSocketAsync(socket, WebSocketCloseStatus.Empty, null, CancellationToken.None);
+                        }
+                    }
+                    else
+                    {
+                        if (socketPingMap[item.Key] > socketPongMap[item.Key])
+                        {
+                        }
+                        await SendMessageAsync(item.Key, new Message() { Data = "ping", MessageType = MessageType.Text});
+                        socketPingMap[item.Key] = DateTime.Now;
+                    }
+                }
+            }
+        }
+
+        private async Task CloseSocketAsync(WebSocketConnection socket, WebSocketCloseStatus status, string message, CancellationToken token)
+        {
+            try
+            {
+                if (status == WebSocketCloseStatus.Empty)
+                {
+                    message = null;
+                }
+                await socket.WebSocket.CloseAsync(status, message, token);
+            }
+            catch (Exception ex)
+            {
+            }
+            finally
+            {
+                await OnDisconnected(socket);
+            }
+        }
+
         protected WebSocketConnectionManager WebSocketConnectionManager { get; set; }
 
         private JsonSerializerSettings _jsonSerializerSettings = new JsonSerializerSettings()
@@ -52,6 +117,7 @@ namespace Bamboo.WebSocketManager
             _jsonSerializerSettings.Converters.Insert(0, new PrimitiveJsonConverter());
             WebSocketConnectionManager = webSocketConnectionManager;
             MethodInvocationStrategy = methodInvocationStrategy;
+            _pingTimer = new Timer(OnPingTimer, null, WebSocket.DefaultKeepAliveInterval, WebSocket.DefaultKeepAliveInterval);
             ulid = NUlid.Ulid.NewUlid().ToGuid().ToString();
         }
 
@@ -75,7 +141,7 @@ namespace Bamboo.WebSocketManager
         {
             await WebSocketConnectionManager.RemoveSocket(WebSocketConnectionManager.GetId(socket)).ConfigureAwait(false);
         }
-
+        #region Pre_Post
         public virtual async Task PreRpcRequest(WebSocketConnection socket, InvocationDescriptor invocationDescriptor, string message)
         {
             await Task.CompletedTask;
@@ -117,6 +183,7 @@ namespace Bamboo.WebSocketManager
             }
             await Task.CompletedTask;
         }
+        #endregion
 
         public virtual async Task OnReceivedTextAsync(WebSocketConnection socket, string serializedMessage)
         {
@@ -216,25 +283,70 @@ namespace Bamboo.WebSocketManager
             await Task.CompletedTask;
         }
 
-        public virtual async Task OnReceivedBinaryAsync(WebSocketConnection socket, string receivedMessage)
+        public virtual async Task OnReceivedBinaryAsync(WebSocketConnection socket, byte[] receivedMessage)
         {
             await Task.CompletedTask;
+        }
+        #region SendMessage
+        ConcurrentQueue<Tuple<WebSocket, WebSocketMessageType, byte[]>> sendQueue = new ConcurrentQueue<Tuple<WebSocket, WebSocketMessageType, byte[]>>();
+
+        public async Task SendMessageAsync(WebSocket socket, WebSocketMessageType messageType, byte[] messageData)
+        {
+
+            if (socket.State != WebSocketState.Open)
+                return;
+
+            sendQueue.Enqueue(new Tuple<WebSocket, WebSocketMessageType, byte[]>(socket, messageType, messageData));
+            await Task.Run((Action)SendMessagesInQueue);
+        }
+
+        protected void SendMessagesInQueue()
+        {
+            while (!sendQueue.IsEmpty)
+            {
+                Tuple<WebSocket, WebSocketMessageType, byte[]> item;
+
+                if (sendQueue.TryDequeue(out item))
+                {
+                    try
+                    {
+                        item.Item1.SendAsync(buffer: new ArraySegment<byte>(array: item.Item3,
+                                          offset: 0,
+                                          count: item.Item3.Length),
+                                          messageType: item.Item2,
+                                          endOfMessage: true,
+                                          cancellationToken: CancellationToken.None).Wait();
+
+                    }
+                    catch (Exception x)
+                    {
+                    }
+                }
+            }
         }
 
         public async Task SendMessageAsync(WebSocketConnection socket, Message message)
         {
             if (socket.WebSocket.State != WebSocketState.Open)
                 return;
-
-            var encodedMessage = Encoding.UTF8.GetBytes(message.Data);
+            bool sendAsync = false;
+            var encodedMessage = (message.MessageType == MessageType.Binary)? message.Bytes: Encoding.UTF8.GetBytes(message.Data);
             try
             {
-                await socket.WebSocket.SendAsync(buffer: new ArraySegment<byte>(array: encodedMessage,
-                                                                      offset: 0,
-                                                                      count: encodedMessage.Length),
-                                       messageType: WebSocketMessageType.Text,
-                                       endOfMessage: true,
-                                       cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                if (sendAsync)
+                {
+                    await SendMessageAsync(socket.WebSocket, (message.MessageType == MessageType.Binary) ? WebSocketMessageType.Binary : WebSocketMessageType.Text, encodedMessage);
+                }
+                else
+                {
+
+                    await socket.WebSocket.SendAsync(buffer: new ArraySegment<byte>(array: encodedMessage,
+                                                                          offset: 0,
+                                                                          count: encodedMessage.Length),
+                                           messageType: (message.MessageType == MessageType.Binary) ? WebSocketMessageType.Binary : WebSocketMessageType.Text,
+                                           endOfMessage: true,
+                                           cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                }
             }
             catch (WebSocketException e)
             {
@@ -293,16 +405,16 @@ namespace Bamboo.WebSocketManager
                 }
             }
         }
-
-        public async Task SendClientResultAsync(string socketId, string methodName, object result)
+        #endregion
+        #region RPC
+        public async Task SendClientResultAsync(string socketId, long id, string methodName, object result)
         {
             // create the method invocation descriptor.
-            InvocationResult invocationResult = new InvocationResult { MethodName = methodName, Result = result };
+            InvocationResult invocationResult = new InvocationResult { Id = id, MethodName = methodName, Result = result };
             WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
             if (socket == null)
                 return;
 
-            invocationResult.Id = socket.NextCmdId();
             var message = new Message()
             {
                 MessageType = MessageType.MethodInvocation,
@@ -312,15 +424,14 @@ namespace Bamboo.WebSocketManager
             await SendMessageAsync(socketId, message).ConfigureAwait(false);
         }
 
-        public async Task SendClientErrorAsync(string socketId, string methodName, RemoteException error)
+        public async Task SendClientErrorAsync(string socketId, long id, string methodName, RemoteException error)
         {
             // create the method invocation descriptor.
-            InvocationResult invocationResult = new InvocationResult { MethodName = methodName, Exception = error };
+            InvocationResult invocationResult = new InvocationResult {Id = id, MethodName = methodName, Exception = error };
             WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
             if (socket == null)
                 return;
 
-            invocationResult.Id = socket.NextCmdId();
             var message = new Message()
             {
                 MessageType = MessageType.MethodInvocation,
@@ -333,7 +444,7 @@ namespace Bamboo.WebSocketManager
         public async Task SendClientNotifyAsync(string socketId, string methodName, object result)
         {
             // create the method invocation descriptor.
-            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = result };
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { Id = 0, MethodName = methodName, Params = result };
             WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
             if (socket == null)
                 return;
@@ -350,7 +461,7 @@ namespace Bamboo.WebSocketManager
         public async Task SendAllNotifyAsync(string methodName, object result)
         {
             // create the method invocation descriptor.
-            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = result };
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { Id = 0, MethodName = methodName, Params = result };
 
             var message = new Message()
             {
@@ -378,7 +489,7 @@ namespace Bamboo.WebSocketManager
         public async Task SendGroupNotifyAsync(string groupID, string methodName, object result)
         {
             // create the method invocation descriptor.
-            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = result };
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { Id = 0, MethodName = methodName, Params = result };
 
             var message = new Message()
             {
@@ -395,7 +506,6 @@ namespace Bamboo.WebSocketManager
                 }
             }
         }
-
         public async Task InvokeClientMethodAsync(string socketId, string methodName, object[] arguments)
         {
             object methodParams = null;
@@ -408,8 +518,8 @@ namespace Bamboo.WebSocketManager
                 methodParams = arguments;
             }
             // create the method invocation descriptor.
-            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = methodParams };
             WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
+            InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = methodParams };
             if (socket == null)
                 return;
 
@@ -483,7 +593,8 @@ namespace Bamboo.WebSocketManager
             // if we reach here we got cancelled or alike so throw a timeout exception.
             throw new TimeoutException(); // todo: insert fancy message here.
         }
-
+        #endregion
+        #region HighLevel_Functions
         public async Task InvokeClientMethodToAllAsync(string methodName, object[] arguments)
         {
             foreach (var pair in WebSocketConnectionManager.GetAll())
@@ -629,5 +740,11 @@ namespace Bamboo.WebSocketManager
         public async Task InvokeClientMethodToAllAsync<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>(string method, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7, T8 arg8, T9 arg9, T10 arg10, T11 arg11, T12 arg12, T13 arg13, T14 arg14, T15 arg15) => await InvokeClientMethodToAllAsync(method, new object[] { arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15 });
 
         public async Task InvokeClientMethodToAllAsync<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16>(string method, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7, T8 arg8, T9 arg9, T10 arg10, T11 arg11, T12 arg12, T13 arg13, T14 arg14, T15 arg15, T16 arg16) => await InvokeClientMethodToAllAsync(method, new object[] { arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16 });
+        #endregion
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+            _pingTimer.Dispose();
+        }
     }
 }
