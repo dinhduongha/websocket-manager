@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using MessagePack;
+using Newtonsoft.Json;
 using System;
 
 namespace Bamboo.WebSocketManager.Common
@@ -6,6 +7,7 @@ namespace Bamboo.WebSocketManager.Common
     /// <summary>
     /// An exception that occured remotely.
     /// </summary>
+    [MessagePackObject]
     public class RemoteException
     {
         /// <summary>
@@ -13,6 +15,7 @@ namespace Bamboo.WebSocketManager.Common
         /// </summary>
         /// <value>The error code.</value>
         [JsonProperty("code")]
+        [Key("code")]
         public long Code { get; set; } = -1;
 
         /// <summary>
@@ -20,6 +23,7 @@ namespace Bamboo.WebSocketManager.Common
         /// </summary>
         /// <value>The exception message.</value>
         [JsonProperty("message")]
+        [Key("message")]
         public string Message { get; set; } = $"A remote exception occured";
 
         /// <summary>
@@ -27,6 +31,7 @@ namespace Bamboo.WebSocketManager.Common
         /// </summary>
         /// <value>The exception data.</value>
         [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+        [Key("data")]
         public object Data { get; set; }
 
         /// <summary>

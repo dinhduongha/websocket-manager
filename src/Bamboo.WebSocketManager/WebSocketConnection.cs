@@ -11,7 +11,7 @@ namespace Bamboo.WebSocketManager
 {
     public class WebSocketConnection
     {
-        public HttpContext HttpConntext { get; set; }
+        public HttpContext HttpContext { get; set; }
         public  WebSocket WebSocket { get; set; }
         private ConcurrentDictionary<string, object> _items = new ConcurrentDictionary<string, object>();
 
@@ -25,7 +25,7 @@ namespace Bamboo.WebSocketManager
         public WebSocketConnection(HttpContext context, WebSocket webSocket)
         {
             Id = Ulid.NewUlid().ToString();
-            HttpConntext = context;
+            HttpContext = context;
             WebSocket = webSocket;
             ConnectedTime = DateTimeOffset.Now;
         }

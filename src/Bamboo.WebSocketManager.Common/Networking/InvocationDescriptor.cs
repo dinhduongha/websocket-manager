@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using MessagePack;
+using Newtonsoft.Json;
 using System;
 
 namespace Bamboo.WebSocketManager.Common
@@ -6,6 +7,7 @@ namespace Bamboo.WebSocketManager.Common
     /// <summary>
     /// Represents a method name with parameters that is to be executed remotely.
     /// </summary>
+    [MessagePackObject]
     public class InvocationDescriptor
     {
         /// <summary>
@@ -13,6 +15,7 @@ namespace Bamboo.WebSocketManager.Common
         /// </summary>
         /// <value>The version of jsonrpc protocol.</value>
         [JsonProperty("jsonrpc")]
+        [Key("jsonrpc")]
         public string JsonRpc { get; set; } = "2.0";
 
         /// <summary>
@@ -20,6 +23,7 @@ namespace Bamboo.WebSocketManager.Common
         /// </summary>
         /// <value>The unique identifier of the invocation.</value>
         [JsonProperty("id")]
+        [Key("id")]
         public long Id { get; set; } = 0;
 
         /// <summary>
@@ -27,6 +31,7 @@ namespace Bamboo.WebSocketManager.Common
         /// </summary>
         /// <value>The name of the remote method.</value>
         [JsonProperty("method")]
+        [Key("method")]
         public string MethodName { get; set; }
 
         /// <summary>
@@ -34,6 +39,7 @@ namespace Bamboo.WebSocketManager.Common
         /// </summary>
         /// <value>The arguments passed to the method.</value>
         [JsonProperty("params", NullValueHandling = NullValueHandling.Ignore)]
+        [Key("params")]
         public object Params { get; set; }
 
         //[JsonProperty("error", NullValueHandling = NullValueHandling.Ignore)]
