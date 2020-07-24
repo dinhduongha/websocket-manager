@@ -53,12 +53,12 @@ namespace Bamboo.WebSocketManager
             //await _webSocketHandler.OnConnected(webSocketConnection);
             await _webSocketHandler.OnConnected(webSocketConnection).ConfigureAwait(false);
 
-            await Receive(webSocketConnection, async (result, serializedMessage, bytes) =>
+            await Receive(webSocketConnection, async (result, message, bytes) =>
             {
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
                     //Message message = JsonConvert.DeserializeObject<Message>(serializedMessage, _jsonSerializerSettings);                    
-                    await _webSocketHandler.OnReceivedTextAsync(webSocketConnection, serializedMessage).ConfigureAwait(false);
+                    await _webSocketHandler.OnReceivedTextAsync(webSocketConnection, message).ConfigureAwait(false);
                     //await _webSocketHandler.OnReceivedTextAsync(webSocketConnection, serializedMessage);
                     return;
                 }
@@ -78,12 +78,12 @@ namespace Bamboo.WebSocketManager
                 {
                     try
                     {
-                        _logger.LogInformation("Client close connection!");
+                        _logger.LogInformation($"Client {context.Connection.RemoteIpAddress} close connection!");
                         await _webSocketHandler.OnDisconnected(webSocketConnection);
                     }
                     catch (WebSocketException e)
                     {
-                        _logger.LogError(e, "Error handling websocket response");
+                        _logger.LogError(e, $"Error handling websocket response");
                         throw; //let's not swallow any exception for now
                     }
                     return;
@@ -133,8 +133,15 @@ namespace Bamboo.WebSocketManager
                     }
                 }
             }
-            await _webSocketHandler.OnDisconnected(socket);
-            //socket.WebSocket.Abort();
+            try
+            {
+                await _webSocketHandler.OnDisconnected(socket);
+                //socket.WebSocket.Abort();
+            }
+            catch (Exception e)
+            {
+
+            }
         }
     }
 }

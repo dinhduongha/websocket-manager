@@ -238,7 +238,7 @@ namespace Bamboo.WebSocketManager
                     // invoke the method only.
                     try
                     {
-                        var result = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket.Id, invocationDescriptor);
+                        var result = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket, invocationDescriptor);
                         timer.Stop();
                         await PostRpcRequest(socket, invocationDescriptor, timer.ElapsedMilliseconds ).ConfigureAwait(false);
                     }
@@ -252,7 +252,7 @@ namespace Bamboo.WebSocketManager
                 {
                     try
                     {
-                        var invokeResult = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket.Id, invocationDescriptor);
+                        var invokeResult = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket, invocationDescriptor);
 
                         if (invokeResult != null)
                         {
@@ -322,7 +322,7 @@ namespace Bamboo.WebSocketManager
                     // invoke the method only.
                     try
                     {
-                        var result = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket.Id, invocationDescriptor);
+                        var result = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket, invocationDescriptor);
                         timer.Stop();
                         await PostRpcRequest(socket, invocationDescriptor, timer.ElapsedMilliseconds).ConfigureAwait(false);
                         
@@ -336,7 +336,7 @@ namespace Bamboo.WebSocketManager
                 {
                     try
                     {
-                        var invokeResult = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket.Id, invocationDescriptor);
+                        var invokeResult = await MethodInvocationStrategy.OnInvokeMethodReceivedAsync(socket, invocationDescriptor);
                         if (invokeResult is InvocationResult)
                             invocationResult = (InvocationResult)invokeResult;
                         if (invokeResult != null)

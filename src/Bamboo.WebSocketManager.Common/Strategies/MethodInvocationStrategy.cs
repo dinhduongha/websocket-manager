@@ -20,13 +20,13 @@ namespace Bamboo.WebSocketManager.Common
         /// The invocation descriptor containing the method name and parameters.
         /// </param>
         /// <returns>Awaitable Task.</returns>
-        public virtual Task<object> OnInvokeMethodReceivedAsync(string socketId, InvocationDescriptor invocationDescriptor)
+        public virtual Task<object> OnInvokeMethodReceivedAsync(object sender, InvocationDescriptor invocationDescriptor)
         {
             throw new NotImplementedException();
         }
-        public virtual Task<object> OnTextReceivedAsync(string socketId, string message)
-        {
-            throw new NotImplementedException();
-        }
+        //public virtual Task<object> OnTextReceivedAsync(string socketId, string message)
+        //{
+        //    throw new NotImplementedException();
+        //}
     }
 }

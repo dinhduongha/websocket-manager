@@ -121,9 +121,12 @@ namespace Bamboo.WebSocketManager
             _sockets.TryRemove(id, out socket);
             try
             {
-                await socket.WebSocket.CloseAsync(closeStatus: WebSocketCloseStatus.NormalClosure,
-                                        statusDescription: "Closed by the WebSocketManager",
-                                        cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                if (socket.WebSocket.State == WebSocketState.Open)
+                {
+                    await socket.WebSocket.CloseAsync(closeStatus: WebSocketCloseStatus.NormalClosure,
+                                            statusDescription: "Closed by the WebSocketManager",
+                                            cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                }
             }
             catch(Exception e)
             {

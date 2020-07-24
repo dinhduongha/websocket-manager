@@ -66,7 +66,7 @@ namespace Bamboo.WebSocketManager.Common
         /// The invocation descriptor containing the method name and parameters.
         /// </param>
         /// <returns>Awaitable Task.</returns>
-        public override async Task<object> OnInvokeMethodReceivedAsync(string socketId, InvocationDescriptor invocationDescriptor)
+        public override async Task<object> OnInvokeMethodReceivedAsync(object sender, InvocationDescriptor invocationDescriptor)
         {
             if (!_handlers.ContainsKey(invocationDescriptor.MethodName))
                 throw new Exception($"Received unknown command '{invocationDescriptor.MethodName}'.");

@@ -95,7 +95,7 @@ namespace Bamboo.WebSocketManager.Common
         /// The invocation descriptor containing the method name and parameters.
         /// </param>
         /// <returns>Awaitable Task.</returns>
-        public override async Task<object> OnInvokeMethodReceivedAsync(string socketId, InvocationDescriptor invocationDescriptor)
+        public override async Task<object> OnInvokeMethodReceivedAsync(object sender, InvocationDescriptor invocationDescriptor)
         {
             // there must be a separator in the method name.
             if (!invocationDescriptor.MethodName.Contains(Separator)) throw new Exception($"Invalid controller or method name '{invocationDescriptor.MethodName}'.");
@@ -126,7 +126,7 @@ namespace Bamboo.WebSocketManager.Common
                     args.Add(invocationDescriptor.Params as object);
                 }
                 if (!NoWebsocketArgument)
-                    args.Insert(0, socketId);
+                    args.Insert(0, sender);
 
                 // call the method asynchronously.
                 try
