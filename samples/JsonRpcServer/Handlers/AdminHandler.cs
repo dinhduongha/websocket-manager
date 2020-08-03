@@ -4,6 +4,7 @@ using System.Net.WebSockets;
 using System.Threading.Tasks;
 using Bamboo.WebSocketManager;
 using Bamboo.WebSocketManager.Common;
+using Microsoft.Extensions.Logging;
 
 namespace IoT
 {
@@ -19,7 +20,8 @@ namespace IoT
 
     public class IoTAdminHandler : WebSocketHandler
     {
-        public IoTAdminHandler(WebSocketConnectionManager webSocketConnectionManager) : base(webSocketConnectionManager, new ControllerMethodInvocationStrategy())
+        public IoTAdminHandler(WebSocketConnectionManager webSocketConnectionManager, ILogger<IoTAdminHandler> logger) 
+            : base(webSocketConnectionManager, new ControllerMethodInvocationStrategy(), logger)
         {
             ((ControllerMethodInvocationStrategy)MethodInvocationStrategy).Controller = this;
         }

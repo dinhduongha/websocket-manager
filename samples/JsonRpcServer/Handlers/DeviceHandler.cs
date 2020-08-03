@@ -31,12 +31,14 @@ namespace IoT
 
     public class IoTDeviceHandler : WebSocketHandler
     {
-        public ILogger Logger { get; set; }
+        public ILogger<IoTDeviceHandler> Logger { get; set; }
         private IoTAdminHandler _adminHandler;
-        public IoTDeviceHandler(WebSocketConnectionManager webSocketConnectionManager, IoTAdminHandler adminHandler) : base(webSocketConnectionManager, new ControllerMethodInvocationStrategy())
+        public IoTDeviceHandler(WebSocketConnectionManager webSocketConnectionManager, IoTAdminHandler adminHandler, ILogger<IoTDeviceHandler> logger)
+            : base(webSocketConnectionManager, new ControllerMethodInvocationStrategy(), logger)
         {
             ((ControllerMethodInvocationStrategy)MethodInvocationStrategy).Controller = this;
-            Logger = NullLogger.Instance;
+            //Logger = NullLogger.Instance;
+            Logger = logger;
             _adminHandler = adminHandler; // Demo DI with other websocket jsonrpc handler
         }
 
