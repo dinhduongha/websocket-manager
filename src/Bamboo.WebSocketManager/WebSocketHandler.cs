@@ -271,6 +271,7 @@ namespace Bamboo.WebSocketManager
                     }
                     catch (Exception e)
                     {
+                        throw;
                     }
                 }
                 
@@ -436,8 +437,50 @@ namespace Bamboo.WebSocketManager
             }
         }
 
+        public async Task SendMessageAsync(WebSocketConnection socket, string text)
+        {
+            if (socket.WebSocket.State != WebSocketState.Open)
+                return;
+            bool sendAsync = false;
+            var encodedMessage =  Encoding.UTF8.GetBytes(text);
+            try
+            {
+                if (sendAsync)
+                {
+                    await SendMessageAsync(socket.WebSocket, WebSocketMessageType.Text, encodedMessage);
+                }
+                else
+                {
+
+                    await socket.WebSocket.SendAsync(buffer: new ArraySegment<byte>(array: encodedMessage,
+                                                                          offset: 0,
+                                                                          count: encodedMessage.Length),
+                                           messageType:  WebSocketMessageType.Text,
+                                           endOfMessage: true,
+                                           cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (WebSocketException e)
+            {
+                if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+                {
+                    await OnDisconnected(socket);
+                }
+            }
+        }
+
         public async Task SendMessageAsync(string socketId, Message message)
         {
+            await SendMessageAsync(WebSocketConnectionManager.GetSocketById(socketId), message).ConfigureAwait(false);
+        }
+
+        public async Task SendMessageAsync(string socketId, string text)
+        {
+            var message = new Message()
+            {
+                MessageType = MessageType.MethodInvocation,
+                Data = text,
+            };
             await SendMessageAsync(WebSocketConnectionManager.GetSocketById(socketId), message).ConfigureAwait(false);
         }
 
@@ -585,7 +628,7 @@ namespace Bamboo.WebSocketManager
                 }
             }
         }
-        public async Task InvokeClientMethodAsync(string socketId, string methodName, object[] arguments)
+        public async Task<long> InvokeClientMethodAsync(string socketId, string methodName, object[] arguments)
         {
             object methodParams = null;
             if (arguments.Length == 1)
@@ -600,7 +643,7 @@ namespace Bamboo.WebSocketManager
             WebSocketConnection socket = WebSocketConnectionManager.GetSocketById(socketId);
             InvocationDescriptor invocationDescriptor = new InvocationDescriptor { MethodName = methodName, Params = methodParams };
             if (socket == null)
-                return;
+                return -1;
 
             invocationDescriptor.Id = socket.NextCmdId();
             var message = new Message()
@@ -610,6 +653,7 @@ namespace Bamboo.WebSocketManager
             };
 
             await SendMessageAsync(socketId, message).ConfigureAwait(false);
+            return invocationDescriptor.Id;
         }
 
         public async Task<T> InvokeClientMethodAsync<T>(string socketId, string methodName, object[] arguments)
