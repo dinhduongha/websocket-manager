@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Http;
 using NUlid;
 using NUlid.Rng;
+using System.Security.Cryptography;
 
 namespace Bamboo.WebSocketManager
 {
@@ -24,11 +25,12 @@ namespace Bamboo.WebSocketManager
 
         public WebSocketConnection(HttpContext context, WebSocket webSocket)
         {
-            Id = Ulid.NewUlid().ToString();
+            //Id = Ulid.NewUlid().ToString();
             HttpContext = context;
             WebSocket = webSocket;
             ConnectedTime = DateTimeOffset.Now;
             Guid = WebSocketConnection.NewGuid();
+            Id = Guid.ToString();
         }
 
         public ConcurrentDictionary<string, object> Items()
@@ -64,6 +66,7 @@ namespace Bamboo.WebSocketManager
         private const long UNIXEPOCHMICROSECONDS = 62135596800000000;
         private static readonly DateTimeOffset EPOCH = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         private static readonly IUlidRng DEFAULTRNG = new CSUlidRng();
+        private static readonly RandomNumberGenerator Rng = RandomNumberGenerator.Create();
         public static Guid NewGuid(DateTime timePart, long randPart)
         {
             var d = DateTimeOffsetToByteArray(timePart);
@@ -86,7 +89,9 @@ namespace Bamboo.WebSocketManager
         public static Guid NewGuid()
         {
             var timePart = DateTime.Now;
-            var randomPart = DEFAULTRNG.GetRandomBytes(10);
+            //var randomPart = DEFAULTRNG.GetRandomBytes(10);
+            byte[] randomPart = new  byte[10];
+            Rng.GetNonZeroBytes(randomPart);
             var d = DateTimeOffsetToByteArray(timePart);
             byte[] bytes = new byte[] { d[3], d[2], d[1], d[0], d[5], d[4], d[7], d[6],
                                         randomPart[0], randomPart[1], randomPart[2], randomPart[3],
